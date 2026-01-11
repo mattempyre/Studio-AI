@@ -1,0 +1,391 @@
+
+import React, { useState, useEffect } from 'react';
+import * as Icons from './Icons';
+import { Project, Scene } from '../types';
+
+interface StoryboardProps {
+  project: Project;
+  onUpdateProject: (project: Project) => void;
+  onNext: () => void;
+}
+
+const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNext }) => {
+  const [selectedSceneId, setSelectedSceneId] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+
+  // Set initial selected scene if not set
+  useEffect(() => {
+    if (!selectedSceneId && project.scenes.length > 0) {
+      setSelectedSceneId(project.scenes[0].id);
+    }
+  }, [project.scenes, selectedSceneId]);
+
+  const activeScene = project.scenes.find(s => s.id === selectedSceneId) || project.scenes[0];
+
+  const updateScene = (field: keyof Scene, value: any) => {
+      const updatedScenes = project.scenes.map(s => 
+          s.id === selectedSceneId ? { ...s, [field]: value } : s
+      );
+      onUpdateProject({ ...project, scenes: updatedScenes });
+  };
+
+  // Group scenes by Script Section ID
+  const scenesBySection = project.script.map(section => ({
+    section,
+    scenes: project.scenes.filter(scene => scene.scriptSectionId === section.id)
+  })).filter(group => group.scenes.length > 0);
+
+  // Handle case where scenes might not have a valid script section ID (orphans)
+  const orphanedScenes = project.scenes.filter(
+    scene => !project.script.find(s => s.id === scene.scriptSectionId)
+  );
+
+  return (
+    <div className="flex-1 flex overflow-hidden font-display bg-background-dark">
+      {/* Sidebar - Scene List */}
+      <aside className="w-72 flex flex-col border-r border-border-color bg-[#0d0b1a] overflow-y-auto custom-scrollbar flex-shrink-0">
+        <div className="p-4 border-b border-white/5">
+          <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold transition-all">
+            <Icons.Wand2 size={16} />
+            Generate Scenes From Script
+          </button>
+        </div>
+        
+        <div className="p-4 flex flex-col gap-6">
+            {scenesBySection.map((group, groupIdx) => (
+                <div key={group.section.id} className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 px-2">
+                        <span className="text-[10px] font-bold bg-white/10 text-white/70 px-1.5 py-0.5 rounded">
+                            {String(groupIdx + 1).padStart(2, '0')}
+                        </span>
+                        <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider truncate">
+                            {group.section.title}
+                        </h4>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 pl-2 border-l border-white/5 ml-3">
+                        {group.scenes.map((scene, idx) => (
+                            <div 
+                                key={scene.id}
+                                onClick={() => setSelectedSceneId(scene.id)}
+                                className={`p-2 rounded-lg flex gap-3 cursor-pointer transition-colors border relative ${
+                                    selectedSceneId === scene.id 
+                                    ? 'bg-primary/10 border-primary/30' 
+                                    : 'hover:bg-white/5 border-transparent'
+                                }`}
+                            >
+                                <div 
+                                    className="w-16 aspect-video bg-cover bg-center rounded-none border border-white/10 flex-shrink-0" 
+                                    style={{ backgroundImage: `url(${scene.imageUrl})` }}
+                                />
+                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                    <p className={`text-[11px] leading-tight line-clamp-2 ${selectedSceneId === scene.id ? 'text-white font-medium' : 'text-text-muted'}`}>
+                                        {scene.narration}
+                                    </p>
+                                </div>
+                                {selectedSceneId === scene.id && (
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-1 h-6 bg-primary rounded-r-full"></div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+
+            {orphanedScenes.length > 0 && (
+                <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/5">
+                     <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider px-2">Unassigned Scenes</h4>
+                     {orphanedScenes.map((scene) => (
+                        <div 
+                            key={scene.id}
+                            onClick={() => setSelectedSceneId(scene.id)}
+                            className={`p-2 rounded-lg flex items-center gap-3 cursor-pointer transition-colors border ${
+                                selectedSceneId === scene.id 
+                                ? 'bg-primary/10 border-primary/30' 
+                                : 'hover:bg-white/5 border-transparent'
+                            }`}
+                        >
+                            <div 
+                                className="w-16 aspect-video bg-cover bg-center rounded-none border border-white/10 flex-shrink-0" 
+                                style={{ backgroundImage: `url(${scene.imageUrl})` }}
+                            />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold truncate text-white">Scene</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+      </aside>
+
+      {/* Main Content - Preview Grid */}
+      <section className="flex-1 flex flex-col bg-panel-bg overflow-hidden relative">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-color bg-background-dark/50 backdrop-blur-md z-10">
+            <div className="flex items-center gap-4">
+            <h3 className="text-lg font-bold">Storyboard Flow</h3>
+            <div className="flex items-center bg-[#1e1933] rounded-lg p-1 border border-white/5">
+                <button 
+                  onClick={() => setViewMode('table')}
+                  className={`px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${viewMode === 'table' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-text-muted hover:bg-white/5 hover:text-white'}`}
+                >
+                  <Icons.List size={12}/> TABLE
+                </button>
+                <button 
+                  onClick={() => setViewMode('grid')}
+                  className={`px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${viewMode === 'grid' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-text-muted hover:bg-white/5 hover:text-white'}`}
+                >
+                  <Icons.Grid size={12}/> GRID
+                </button>
+            </div>
+            </div>
+            <button className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold bg-[#292348] hover:bg-[#3b3267] rounded-lg transition-colors">
+                <Icons.Wand2 size={12} />
+                AI Re-layout
+            </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 custom-scrollbar">
+            {scenesBySection.map((group) => (
+                <div key={group.section.id}>
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="h-px flex-1 bg-white/5"></div>
+                        <span className="text-xs font-bold text-text-muted uppercase tracking-widest">{group.section.title}</span>
+                        <div className="h-px flex-1 bg-white/5"></div>
+                    </div>
+                    
+                    {viewMode === 'table' ? (
+                      /* Table / List View */
+                      <div className="flex flex-col gap-4">
+                          {group.scenes.map((scene, idx) => (
+                              <div 
+                                  key={scene.id} 
+                                  className={`flex gap-4 group transition-all duration-300 ${
+                                      selectedSceneId === scene.id ? 'opacity-100' : 'opacity-80 hover:opacity-100'
+                                  }`}
+                              >
+                                  <div className="w-8 flex flex-col items-center pt-2">
+                                      <div 
+                                          onClick={() => setSelectedSceneId(scene.id)}
+                                          className={`size-6 rounded-full border flex items-center justify-center text-[10px] font-bold cursor-pointer transition-colors ${selectedSceneId === scene.id ? 'bg-primary border-primary text-white' : 'bg-[#1e1933] border-white/10 text-text-muted'}`}
+                                      >
+                                          {idx + 1}
+                                      </div>
+                                      <div className="flex-1 w-[1px] bg-white/5 mt-2"></div>
+                                  </div>
+                                  
+                                  <div 
+                                      onClick={() => setSelectedSceneId(scene.id)}
+                                      className={`flex-1 flex bg-card-bg border rounded-xl overflow-hidden transition-all cursor-pointer ${selectedSceneId === scene.id ? 'border-primary/50 ring-2 ring-primary/20 shadow-2xl' : 'border-border-color hover:border-primary/30'}`}
+                                  >
+                                      <div className="flex-1 p-5 flex flex-col min-h-[180px]">
+                                          <label className="text-[10px] text-text-muted font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+                                              <Icons.Mic size={10} /> Narration
+                                          </label>
+                                          <textarea 
+                                              readOnly 
+                                              className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-sm leading-relaxed resize-none text-white/90"
+                                              value={scene.narration}
+                                          />
+                                      </div>
+                                      <div className="w-80 aspect-video border-l border-white/5 bg-black group/image shrink-0 relative">
+                                          <div className="absolute inset-0 bg-cover bg-center rounded-none" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
+                                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity flex items-end p-3">
+                                              <p className="text-[10px] text-white/90 line-clamp-2">{scene.imagePrompt}</p>
+                                          </div>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                    ) : (
+                      /* Grid View */
+                      <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+                        {group.scenes.map((scene, idx) => (
+                           <div 
+                              key={scene.id}
+                              onClick={() => setSelectedSceneId(scene.id)}
+                              className={`group relative flex flex-col bg-card-bg border rounded-xl overflow-hidden cursor-pointer transition-all ${
+                                selectedSceneId === scene.id 
+                                ? 'border-primary ring-1 ring-primary shadow-lg shadow-primary/20 transform scale-[1.01]' 
+                                : 'border-border-color hover:border-primary/50 hover:shadow-xl'
+                              }`}
+                           >
+                              {/* Image Area */}
+                              <div className="aspect-video bg-black relative">
+                                  <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
+                                  <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
+                                  
+                                  {/* Badge */}
+                                  <div className={`absolute top-2 left-2 size-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 ${
+                                      selectedSceneId === scene.id ? 'bg-primary text-white' : 'bg-black/60 text-white backdrop-blur-md'
+                                  }`}>
+                                      {idx + 1}
+                                  </div>
+
+                                  {/* Overlay Controls */}
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 backdrop-blur-[1px]">
+                                     <button className="bg-black/50 hover:bg-primary text-white rounded-full p-2 transition-colors transform translate-y-2 group-hover:translate-y-0">
+                                        <Icons.Maximize2 size={16} />
+                                     </button>
+                                  </div>
+                              </div>
+
+                              {/* Content */}
+                              <div className="p-4 flex flex-col gap-3 flex-1">
+                                  <div className="flex items-center justify-between">
+                                      <span className="text-[9px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-1">
+                                          <Icons.Mic size={10} /> Narration
+                                      </span>
+                                  </div>
+                                  <p className="text-[12px] text-white/90 line-clamp-3 leading-relaxed font-medium">
+                                      {scene.narration}
+                                  </p>
+                                  
+                                  <div className="mt-auto pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-text-muted">
+                                     <div className="flex items-center gap-1.5">
+                                        <Icons.Video size={10} />
+                                        <span>{scene.cameraMovement}</span>
+                                     </div>
+                                     <div className="flex items-center gap-1.5">
+                                        <Icons.Film size={10} />
+                                        <span>{scene.visualStyle}</span>
+                                     </div>
+                                  </div>
+                              </div>
+                           </div>
+                        ))}
+                      </div>
+                    )}
+                </div>
+            ))}
+        </div>
+      </section>
+
+      {/* Right Panel - Inspector */}
+      <aside className="w-80 border-l border-border-color bg-[#0d0b1a] flex flex-col h-full flex-shrink-0">
+        <div className="px-6 py-4 border-b border-border-color flex items-center justify-between">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+                <Icons.Settings className="text-primary" size={18} />
+                Scene Inspector
+            </h3>
+        </div>
+        
+        {activeScene && (
+            <>
+                <div className="flex border-b border-white/5 px-6">
+                    <button 
+                        onClick={() => setActiveTab('image')}
+                        className={`flex-1 py-3 text-[11px] font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === 'image' ? 'text-white border-primary' : 'text-text-muted border-transparent hover:text-white'}`}
+                    >
+                        Image
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('video')}
+                        className={`flex-1 py-3 text-[11px] font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === 'video' ? 'text-white border-primary' : 'text-text-muted border-transparent hover:text-white'}`}
+                    >
+                        Video
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                    {activeTab === 'image' ? (
+                        <div className="space-y-6">
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Image Prompt</h4>
+                                    <span className="text-[9px] text-text-muted flex items-center gap-1"><Icons.RefreshCw size={10}/> Auto-sync</span>
+                                </div>
+                                <div className="relative">
+                                    <textarea 
+                                        className="w-full bg-[#1e1933] border border-white/10 rounded-lg p-3 text-xs text-white/90 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 leading-relaxed min-h-[100px]"
+                                        value={activeScene.imagePrompt}
+                                        onChange={(e) => updateScene('imagePrompt', e.target.value)}
+                                    />
+                                    <button className="absolute bottom-2 right-2 text-text-muted hover:text-white"><Icons.Wand2 size={14}/></button>
+                                </div>
+                                <button className="w-full mt-3 py-2 bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-2">
+                                    <Icons.RefreshCw size={14} /> Regenerate Image
+                                </button>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="p-3 bg-[#1e1933] border border-white/5 rounded-xl flex items-center justify-between">
+                                    <div className="flex flex-col gap-1">
+                                        <h4 className="text-[9px] text-text-muted font-bold uppercase">Visual Style</h4>
+                                        <div className="flex items-center gap-2 text-xs font-bold">
+                                            <Icons.Film size={14} className="text-primary"/>
+                                            {activeScene.visualStyle}
+                                        </div>
+                                    </div>
+                                    <Icons.ChevronRight size={14} className="text-text-muted" />
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Video Prompt</h4>
+                                    <span className="text-[9px] text-text-muted flex items-center gap-1"><Icons.Wand2 size={10}/> AI Generated</span>
+                                </div>
+                                <div className="relative">
+                                    <textarea 
+                                        className="w-full bg-[#1e1933] border border-white/10 rounded-lg p-3 text-xs text-white/90 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 leading-relaxed min-h-[100px]"
+                                        value={activeScene.videoPrompt || ''}
+                                        onChange={(e) => updateScene('videoPrompt', e.target.value)}
+                                        placeholder="Describe the video motion and details..."
+                                    />
+                                    <button className="absolute bottom-2 right-2 text-text-muted hover:text-white"><Icons.Wand2 size={14}/></button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider mb-3">Camera Movement</h4>
+                                <div className="relative">
+                                    <select 
+                                        className="w-full bg-[#1e1933] border border-white/10 rounded-lg py-2.5 px-3 text-xs text-white appearance-none focus:border-primary focus:outline-none cursor-pointer"
+                                        value={activeScene.cameraMovement}
+                                        onChange={(e) => updateScene('cameraMovement', e.target.value)}
+                                    >
+                                        <option>Zoom In (Slow)</option>
+                                        <option>Zoom Out</option>
+                                        <option>Pan Left</option>
+                                        <option>Pan Right</option>
+                                        <option>Pan Up</option>
+                                        <option>Orbit</option>
+                                        <option>Static</option>
+                                        <option>Truck Left</option>
+                                    </select>
+                                    <Icons.ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={14} />
+                                </div>
+                            </div>
+                            <div>
+                                <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider mb-3">Motion Strength</h4>
+                                <input type="range" className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer" />
+                            </div>
+                            
+                            <button className="w-full py-3 bg-primary text-white rounded-lg text-[11px] font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
+                                <Icons.Video size={16} /> GENERATE VIDEO
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </>
+        )}
+
+        <div className="p-6 mt-auto border-t border-white/5 bg-background-dark/50">
+            <button 
+                onClick={onNext}
+                className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-all uppercase tracking-wider"
+            >
+                Preview Full Video
+            </button>
+        </div>
+      </aside>
+    </div>
+  );
+};
+
+export default Storyboard;

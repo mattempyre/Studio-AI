@@ -1,0 +1,5 @@
+{
+  "name": "VideoGen AI Studio",
+  "description": "A professional AI video creation platform. Generate scripts, storyboards, and videos using Gemini models with a high-fidelity dark UI.",
+  "requestFramePermissions": []
+}
