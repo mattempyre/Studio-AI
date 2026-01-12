@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as Icons from './Icons';
 import { Project, Scene } from '../types';
+import { generateImage, generateVideo } from '../services/geminiService';
 
 interface StoryboardProps {
   project: Project;
@@ -13,6 +14,14 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
   const [selectedSceneId, setSelectedSceneId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  const [generatingImages, setGeneratingImages] = useState<Set<string>>(new Set());
+  const [generatingVideos, setGeneratingVideos] = useState<Set<string>>(new Set());
+
+  // Use a ref to access the latest project state inside async functions without stale closures
+  const projectRef = useRef(project);
+  useEffect(() => {
+      projectRef.current = project;
+  }, [project]);
 
   // Set initial selected scene if not set
   useEffect(() => {
@@ -20,6 +29,48 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
       setSelectedSceneId(project.scenes[0].id);
     }
   }, [project.scenes, selectedSceneId]);
+
+  // Auto-generate images for scenes that don't have one
+  useEffect(() => {
+      const scenesToGenerate = project.scenes.filter(s => !s.imageUrl && !generatingImages.has(s.id));
+      
+      if (scenesToGenerate.length > 0) {
+          // Mark these IDs as generating immediately to prevent double-trigger
+          setGeneratingImages(prev => {
+              const next = new Set(prev);
+              scenesToGenerate.forEach(s => next.add(s.id));
+              return next;
+          });
+
+          const generate = async () => {
+              const currentProject = projectRef.current;
+              const idsToUpdate = scenesToGenerate.map(s => s.id);
+              
+              // Process one by one to avoid rate limits in this demo, or all parallel
+              for (const scene of scenesToGenerate) {
+                   try {
+                       const imageUrl = await generateImage(scene.imagePrompt || scene.narration);
+                       
+                       // Update state progressively
+                       onUpdateProject({
+                           ...projectRef.current, // Use latest ref
+                           scenes: projectRef.current.scenes.map(s => s.id === scene.id ? { ...s, imageUrl } : s)
+                       });
+                   } catch (e) {
+                       console.error(`Failed to generate image for scene ${scene.id}`, e);
+                   } finally {
+                       setGeneratingImages(prev => {
+                           const next = new Set(prev);
+                           next.delete(scene.id);
+                           return next;
+                       });
+                   }
+              }
+          };
+
+          generate();
+      }
+  }, [project.scenes, generatingImages, onUpdateProject]);
 
   const activeScene = project.scenes.find(s => s.id === selectedSceneId) || project.scenes[0];
 
@@ -30,13 +81,37 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
       onUpdateProject({ ...project, scenes: updatedScenes });
   };
 
+  // Trigger regeneration by clearing the image URL, which fires the effect above
+  const handleRegenerateImage = () => {
+      updateScene('imageUrl', '');
+  };
+
+  const handleGenerateVideo = async () => {
+      if (!activeScene || generatingVideos.has(activeScene.id)) return;
+      
+      setGeneratingVideos(prev => new Set(prev).add(activeScene.id));
+      try {
+          const prompt = activeScene.videoPrompt || activeScene.imagePrompt || activeScene.narration;
+          const videoUrl = await generateVideo(prompt);
+          updateScene('videoUrl', videoUrl);
+      } catch (e) {
+          console.error("Video generation failed", e);
+          alert("Failed to generate video. Please ensure you have a valid API Key selected.");
+      } finally {
+          setGeneratingVideos(prev => {
+              const next = new Set(prev);
+              next.delete(activeScene.id);
+              return next;
+          });
+      }
+  };
+
   // Group scenes by Script Section ID
   const scenesBySection = project.script.map(section => ({
     section,
     scenes: project.scenes.filter(scene => scene.scriptSectionId === section.id)
   })).filter(group => group.scenes.length > 0);
 
-  // Handle case where scenes might not have a valid script section ID (orphans)
   const orphanedScenes = project.scenes.filter(
     scene => !project.script.find(s => s.id === scene.scriptSectionId)
   );
@@ -76,9 +151,21 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                 }`}
                             >
                                 <div 
-                                    className="w-16 aspect-video bg-cover bg-center rounded-none border border-white/10 flex-shrink-0" 
-                                    style={{ backgroundImage: `url(${scene.imageUrl})` }}
-                                />
+                                    className="w-16 aspect-video bg-cover bg-center rounded-none border border-white/10 flex-shrink-0 relative overflow-hidden bg-black" 
+                                >
+                                    {scene.imageUrl ? (
+                                        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${scene.imageUrl})` }} />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-white/5">
+                                            <Icons.RefreshCw size={12} className="text-white/20 animate-spin" />
+                                        </div>
+                                    )}
+                                    {scene.videoUrl && (
+                                         <div className="absolute top-0.5 right-0.5 bg-black/50 rounded-full p-0.5">
+                                            <Icons.Video size={8} className="text-white"/>
+                                         </div>
+                                    )}
+                                </div>
                                 <div className="flex-1 min-w-0 flex flex-col justify-center">
                                     <p className={`text-[11px] leading-tight line-clamp-2 ${selectedSceneId === scene.id ? 'text-white font-medium' : 'text-text-muted'}`}>
                                         {scene.narration}
@@ -140,10 +227,6 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                 </button>
             </div>
             </div>
-            <button className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold bg-[#292348] hover:bg-[#3b3267] rounded-lg transition-colors">
-                <Icons.Wand2 size={12} />
-                AI Re-layout
-            </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 custom-scrollbar">
@@ -189,11 +272,22 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                               value={scene.narration}
                                           />
                                       </div>
-                                      <div className="w-80 aspect-video border-l border-white/5 bg-black group/image shrink-0 relative">
-                                          <div className="absolute inset-0 bg-cover bg-center rounded-none" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
-                                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity flex items-end p-3">
-                                              <p className="text-[10px] text-white/90 line-clamp-2">{scene.imagePrompt}</p>
-                                          </div>
+                                      <div className="w-80 aspect-video border-l border-white/5 bg-black group/image shrink-0 relative flex items-center justify-center overflow-hidden">
+                                          {scene.videoUrl ? (
+                                              <video src={scene.videoUrl} className="w-full h-full object-cover" controls={false} muted loop autoPlay />
+                                          ) : scene.imageUrl ? (
+                                              <>
+                                                  <div className="absolute inset-0 bg-cover bg-center rounded-none" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
+                                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity flex items-end p-3">
+                                                      <p className="text-[10px] text-white/90 line-clamp-2">{scene.imagePrompt}</p>
+                                                  </div>
+                                              </>
+                                          ) : (
+                                              <div className="flex flex-col items-center gap-2 text-text-muted">
+                                                  <Icons.RefreshCw className="animate-spin" size={24} />
+                                                  <span className="text-[10px] font-bold uppercase tracking-wider">Generating Scene...</span>
+                                              </div>
+                                          )}
                                       </div>
                                   </div>
                               </div>
@@ -212,10 +306,21 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                 : 'border-border-color hover:border-primary/50 hover:shadow-xl'
                               }`}
                            >
-                              {/* Image Area */}
-                              <div className="aspect-video bg-black relative">
-                                  <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
-                                  <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
+                              {/* Image/Video Area */}
+                              <div className="aspect-video bg-black relative flex items-center justify-center overflow-hidden">
+                                  {scene.videoUrl ? (
+                                     <video src={scene.videoUrl} className="w-full h-full object-cover" muted loop autoPlay />
+                                  ) : scene.imageUrl ? (
+                                      <>
+                                          <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
+                                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
+                                      </>
+                                  ) : (
+                                      <div className="flex flex-col items-center gap-2 text-text-muted z-10">
+                                          <Icons.RefreshCw className="animate-spin" size={24} />
+                                          <span className="text-[10px] font-bold uppercase tracking-wider">Generating...</span>
+                                      </div>
+                                  )}
                                   
                                   {/* Badge */}
                                   <div className={`absolute top-2 left-2 size-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 ${
@@ -225,11 +330,13 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                   </div>
 
                                   {/* Overlay Controls */}
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 backdrop-blur-[1px]">
-                                     <button className="bg-black/50 hover:bg-primary text-white rounded-full p-2 transition-colors transform translate-y-2 group-hover:translate-y-0">
-                                        <Icons.Maximize2 size={16} />
-                                     </button>
-                                  </div>
+                                  {scene.imageUrl && (
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 backdrop-blur-[1px]">
+                                        <button className="bg-black/50 hover:bg-primary text-white rounded-full p-2 transition-colors transform translate-y-2 group-hover:translate-y-0">
+                                            <Icons.Maximize2 size={16} />
+                                        </button>
+                                    </div>
+                                  )}
                               </div>
 
                               {/* Content */}
@@ -305,8 +412,13 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                     />
                                     <button className="absolute bottom-2 right-2 text-text-muted hover:text-white"><Icons.Wand2 size={14}/></button>
                                 </div>
-                                <button className="w-full mt-3 py-2 bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-2">
-                                    <Icons.RefreshCw size={14} /> Regenerate Image
+                                <button 
+                                    onClick={handleRegenerateImage}
+                                    disabled={generatingImages.has(activeScene.id)}
+                                    className="w-full mt-3 py-2 bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {generatingImages.has(activeScene.id) ? <Icons.RefreshCw className="animate-spin" size={14}/> : <Icons.RefreshCw size={14} />} 
+                                    {generatingImages.has(activeScene.id) ? 'Generating...' : 'Regenerate Image'}
                                 </button>
                             </div>
 
@@ -366,9 +478,19 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                 <input type="range" className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer" />
                             </div>
                             
-                            <button className="w-full py-3 bg-primary text-white rounded-lg text-[11px] font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2">
-                                <Icons.Video size={16} /> GENERATE VIDEO
+                            <button 
+                                onClick={handleGenerateVideo}
+                                disabled={generatingVideos.has(activeScene.id)}
+                                className="w-full py-3 bg-primary text-white rounded-lg text-[11px] font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {generatingVideos.has(activeScene.id) ? <Icons.RefreshCw className="animate-spin" size={16}/> : <Icons.Video size={16} />}
+                                {generatingVideos.has(activeScene.id) ? 'GENERATING VIDEO...' : 'GENERATE VIDEO'}
                             </button>
+                            {activeScene.videoUrl && (
+                                <p className="text-[10px] text-green-400 font-bold text-center mt-2 flex items-center justify-center gap-1">
+                                    <Icons.CheckCircle size={10}/> Video Generated
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>

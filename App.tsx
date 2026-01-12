@@ -6,8 +6,7 @@ import Dashboard from './components/Dashboard';
 import ScriptEditor from './components/ScriptEditor';
 import Storyboard from './components/Storyboard';
 import VideoPreview from './components/VideoPreview';
-import VoiceOver from './components/VoiceOver';
-import { ViewState, Project, User, Scene, Character } from './types';
+import { ViewState, Project, User, Scene, Character, Voice } from './types';
 import { INITIAL_PROJECT } from './constants';
 
 // Mock Initial Global Library
@@ -48,6 +47,7 @@ const App: React.FC = () => {
   
   // Workspace Level State
   const [libraryCharacters, setLibraryCharacters] = useState<Character[]>(INITIAL_LIBRARY);
+  const [clonedVoices, setClonedVoices] = useState<Voice[]>([]);
 
   // Derived state
   const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
@@ -71,6 +71,10 @@ const App: React.FC = () => {
 
   const handleAddCharacterToLibrary = (character: Character) => {
     setLibraryCharacters(prev => [...prev, character]);
+  };
+
+  const handleAddClonedVoice = (voice: Voice) => {
+      setClonedVoices(prev => [...prev, voice]);
   };
 
   const handleUpdateLibraryCharacter = (updatedChar: Character) => {
@@ -175,7 +179,7 @@ const App: React.FC = () => {
       scenes: newScenes
     });
 
-    handleNavigate('voiceover');
+    handleNavigate('storyboard');
   };
 
   if (!user) {
@@ -199,18 +203,12 @@ const App: React.FC = () => {
           <ScriptEditor 
             project={activeProject} 
             libraryCharacters={libraryCharacters}
+            clonedVoices={clonedVoices}
             onAddCharacterToLibrary={handleAddCharacterToLibrary}
             onUpdateLibraryCharacter={handleUpdateLibraryCharacter}
+            onAddClonedVoice={handleAddClonedVoice}
             onUpdateProject={handleProjectUpdate}
             onNext={handleScriptNext} 
-          />
-        );
-      case 'voiceover':
-        return (
-          <VoiceOver 
-            project={activeProject}
-            onUpdateProject={handleProjectUpdate}
-            onNext={() => handleNavigate('storyboard')}
           />
         );
       case 'storyboard':
@@ -246,6 +244,7 @@ const App: React.FC = () => {
       activeProjectId={activeProjectId}
       onSelectProject={handleSelectProject}
       onUpdateProject={handleProjectUpdate}
+      onCreateProject={handleCreateProject}
     >
       {renderView()}
     </Layout>

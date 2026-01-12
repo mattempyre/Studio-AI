@@ -13,11 +13,11 @@ interface LayoutProps {
   activeProjectId: string;
   onSelectProject: (id: string) => void;
   onUpdateProject: (project: Project) => void;
+  onCreateProject: () => void;
 }
 
 const CREATION_STEPS = [
-  { id: 'script', label: 'Script Editor' },
-  { id: 'voiceover', label: 'Voice Over' },
+  { id: 'script', label: 'Script & Audio' },
   { id: 'storyboard', label: 'Storyboard' },
   { id: 'video', label: 'Video Editor' },
 ];
@@ -31,7 +31,8 @@ const Layout: React.FC<LayoutProps> = ({
   projects,
   activeProjectId,
   onSelectProject,
-  onUpdateProject
+  onUpdateProject,
+  onCreateProject
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState('');
@@ -125,8 +126,7 @@ const Layout: React.FC<LayoutProps> = ({
           <nav className="flex flex-col gap-2 flex-grow">
             {[
               { id: 'dashboard', icon: Icons.LayoutDashboard, label: 'Dashboard' },
-              { id: 'script', icon: Icons.Type, label: 'Script Editor' },
-              { id: 'voiceover', icon: Icons.Mic, label: 'Voice Over' },
+              { id: 'script', icon: Icons.Type, label: 'Script & Audio' },
               { id: 'storyboard', icon: Icons.Grid, label: 'Storyboard' },
               { id: 'video', icon: Icons.Film, label: 'Video Editor' },
             ].map((item) => (
@@ -201,7 +201,13 @@ const Layout: React.FC<LayoutProps> = ({
                                 <div className="relative">
                                     <select 
                                         value={activeProjectId}
-                                        onChange={(e) => onSelectProject(e.target.value)}
+                                        onChange={(e) => {
+                                            if (e.target.value === 'new_project_action') {
+                                                onCreateProject();
+                                            } else {
+                                                onSelectProject(e.target.value);
+                                            }
+                                        }}
                                         className="appearance-none bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer pr-5 truncate max-w-[200px]"
                                     >
                                         {projects.map(p => (
@@ -209,6 +215,9 @@ const Layout: React.FC<LayoutProps> = ({
                                                 {p.name}
                                             </option>
                                         ))}
+                                        <option value="new_project_action" className="bg-background-dark text-primary font-bold">
+                                            + Create New Project
+                                        </option>
                                     </select>
                                     <Icons.ChevronDown size={12} className="text-text-muted absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
                                 </div>

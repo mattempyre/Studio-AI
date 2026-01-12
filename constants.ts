@@ -156,5 +156,39 @@ export const INITIAL_PROJECT: Project = {
       cameraMovement: 'Static',
       visualStyle: 'Artistic'
     }
+  ],
+  audioTracks: [
+    {
+      id: 'track_vo',
+      type: 'voice',
+      name: 'Voice Over',
+      volume: 1.0,
+      isMuted: false,
+      clips: [
+        { id: 'clip_vo1', name: 'Intro & Hook', startTime: 0, duration: 25 },
+        { id: 'clip_vo2', name: 'Tech Deep Dive', startTime: 25, duration: 30 }
+      ]
+    },
+    {
+      id: 'track_music_1',
+      type: 'music',
+      name: 'Music Track 1',
+      volume: 0.8,
+      isMuted: false,
+      clips: [
+        { id: 'clip_m1', name: 'Epic Rise (Looped)', startTime: 0, duration: 55 }
+      ]
+    },
+    {
+      id: 'track_sfx_1',
+      type: 'sfx',
+      name: 'SFX Track 1',
+      volume: 0.6,
+      isMuted: false,
+      clips: [
+        { id: 'clip_sfx1', name: 'Whoosh', startTime: 5, duration: 2 },
+        { id: 'clip_sfx2', name: 'Digital Glitch', startTime: 25, duration: 3 }
+      ]
+    }
   ]
 };

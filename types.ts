@@ -13,6 +13,7 @@ export interface ScriptSection {
   title: string;
   content: string;
   duration: string;
+  audioUrl?: string; // New field for persisting generated audio
 }
 
 export interface TextOverlay {
@@ -46,10 +47,27 @@ export interface Scene {
   imagePrompt: string;
   videoPrompt?: string; // New field for video generation prompt
   imageUrl?: string;
+  videoUrl?: string; // New field for generated video URL
   cameraMovement: string;
   visualStyle: string;
   trimStart?: number; // seconds
   trimEnd?: number; // seconds
+}
+
+export interface AudioClip {
+  id: string;
+  name: string;
+  startTime: number; // Seconds on timeline
+  duration: number; // Seconds
+}
+
+export interface AudioTrack {
+  id: string;
+  type: 'voice' | 'music' | 'sfx';
+  name: string;
+  volume: number;
+  isMuted: boolean;
+  clips: AudioClip[];
 }
 
 export interface Project {
@@ -64,8 +82,9 @@ export interface Project {
   scenes: Scene[];
   textOverlays: TextOverlay[]; 
   voiceId?: string; // New field
-  musicTrack?: string; 
+  musicTrack?: string; // Deprecated in favor of audioTracks
   musicVolume?: number; 
+  audioTracks?: AudioTrack[]; // New field for multi-track audio
   progress: number;
   sources?: Source[];
   visualStyle?: string; // New field
