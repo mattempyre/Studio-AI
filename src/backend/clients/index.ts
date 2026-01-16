@@ -9,3 +9,16 @@ export {
   type VideoGenerationParams,
   type ProgressCallback,
 } from './comfyui.js';
+
+export {
+  ChatterboxClient,
+  ChatterboxError,
+  createChatterboxClient,
+  getWavDurationMs,
+  VOICE_PRESETS,
+  type ChatterboxClientOptions,
+  type ChatterboxVoice,
+  type VoiceInfo,
+  type SpeechGenerationParams,
+  type SpeechGenerationResult,
+} from './chatterbox.js';
