@@ -18,6 +18,7 @@ export const workflows = {
   // Video generation workflows
   video: {
     'wan-2.2': path.join(__dirname, 'video', 'wan-2.2.json'),
+    'wan-2.2-14b': path.join(__dirname, 'video', 'video_wan2_2_14B_i2v.json'),
     // Add more video models here
     // 'ltx-2': path.join(__dirname, 'video', 'ltx-2.json'),
   },

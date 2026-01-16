@@ -41,9 +41,12 @@ export interface ImageGenerationParams {
 export interface VideoGenerationParams {
   imageFile: string;
   prompt: string;
+  negativePrompt?: string;
   cameraMovement?: 'static' | 'pan_left' | 'pan_right' | 'zoom_in' | 'zoom_out' | 'orbit' | 'truck';
   motionStrength?: number;
-  duration?: number;
+  width?: number;
+  height?: number;
+  frames?: number;
   fps?: number;
   seed?: number;
 }
@@ -52,6 +55,15 @@ export interface VideoGenerationParams {
  * Progress callback type
  */
 export type ProgressCallback = (progress: number, message?: string) => void;
+
+/**
+ * Output file info with subfolder
+ */
+export interface OutputFile {
+  filename: string;
+  subfolder: string;
+  type: string;
+}
 
 /**
  * ComfyUI queue response
@@ -126,13 +138,20 @@ export interface ComfyUIClientOptions {
 }
 
 /**
+ * Get default output directory from environment or fallback
+ */
+function getDefaultOutputDir(): string {
+  return process.env.OUTPUT_DIR || './data/projects';
+}
+
+/**
  * Default configuration values
  */
-const DEFAULT_OPTIONS: Required<Omit<ComfyUIClientOptions, 'baseUrl'>> = {
+const DEFAULT_OPTIONS: Omit<Required<Omit<ComfyUIClientOptions, 'baseUrl'>>, 'outputDir'> & { outputDir: null } = {
   timeout: 300000, // 5 minutes
   maxRetries: 3,
   retryDelay: 1000,
-  outputDir: './data/generated',
+  outputDir: null, // Use getDefaultOutputDir() at runtime
 };
 
 /**
@@ -159,7 +178,7 @@ export class ComfyUIClient {
     this.timeout = options.timeout ?? DEFAULT_OPTIONS.timeout;
     this.maxRetries = options.maxRetries ?? DEFAULT_OPTIONS.maxRetries;
     this.retryDelay = options.retryDelay ?? DEFAULT_OPTIONS.retryDelay;
-    this.outputDir = options.outputDir ?? DEFAULT_OPTIONS.outputDir;
+    this.outputDir = options.outputDir ?? getDefaultOutputDir();
     this.clientId = `studio-ai-${Date.now()}`;
   }
 
@@ -277,9 +296,10 @@ export class ComfyUIClient {
     params: VideoGenerationParams
   ): ComfyUIWorkflow {
     const injections: Record<string, Record<string, unknown>> = {};
+    let seedInjected = false;
 
     for (const [nodeId, node] of Object.entries(workflow)) {
-      // LoadImage nodes
+      // LoadImage nodes - inject source image
       if (node.class_type === 'LoadImage') {
         injections[nodeId] = { image: path.basename(params.imageFile) };
       }
@@ -287,18 +307,52 @@ export class ComfyUIClient {
       // Text prompt nodes
       if (node.class_type === 'CLIPTextEncode') {
         const title = node._meta?.title?.toLowerCase() || '';
-        if (title.includes('positive') || title.includes('prompt')) {
+        // Check for negative first since "negative prompt" contains both keywords
+        if (title.includes('negative')) {
+          if (params.negativePrompt !== undefined) {
+            injections[nodeId] = { text: params.negativePrompt };
+          }
+        } else if (title.includes('positive') || title.includes('prompt')) {
           injections[nodeId] = { text: params.prompt };
         }
       }
 
-      // Video-specific nodes (WAN, SVD, etc.)
-      if (node.class_type.includes('Video') || node.class_type.includes('SVD')) {
-        injections[nodeId] = {
-          ...(params.motionStrength !== undefined && { motion_bucket_id: Math.round(params.motionStrength * 255) }),
-          ...(params.fps !== undefined && { fps: params.fps }),
-          ...(params.seed !== undefined && { seed: params.seed }),
-        };
+      // WanImageToVideo node - main i2v conditioning
+      if (node.class_type === 'WanImageToVideo') {
+        const updates: Record<string, unknown> = {};
+        if (params.width !== undefined) updates.width = params.width;
+        if (params.height !== undefined) updates.height = params.height;
+        if (params.frames !== undefined) updates.length = params.frames;
+        if (Object.keys(updates).length > 0) {
+          injections[nodeId] = updates;
+        }
+      }
+
+      // KSampler / KSamplerAdvanced nodes - inject seed (only first one to avoid conflicts)
+      if ((node.class_type === 'KSampler' || node.class_type === 'KSamplerAdvanced') && !seedInjected) {
+        if (params.seed !== undefined) {
+          injections[nodeId] = { noise_seed: params.seed };
+          seedInjected = true;
+        }
+      }
+
+      // CreateVideo node - inject fps
+      if (node.class_type === 'CreateVideo') {
+        if (params.fps !== undefined) {
+          injections[nodeId] = { fps: params.fps };
+        }
+      }
+
+      // SVD-style video nodes (for other workflows)
+      if (node.class_type.includes('SVD') && node.class_type.includes('Conditioning')) {
+        const updates: Record<string, unknown> = {};
+        if (params.motionStrength !== undefined) {
+          updates.motion_bucket_id = Math.round(params.motionStrength * 255);
+        }
+        if (params.fps !== undefined) updates.fps = params.fps;
+        if (Object.keys(updates).length > 0) {
+          injections[nodeId] = updates;
+        }
       }
     }
 
@@ -464,10 +518,10 @@ export class ComfyUIClient {
     return job?.status?.completed ?? false;
   }
 
-  /**
-   * Get job outputs from history
+/**
+   * Get job outputs from history (returns full file info including subfolder)
    */
-  async getJobOutputs(promptId: string): Promise<string[]> {
+  async getJobOutputs(promptId: string): Promise<OutputFile[]> {
     const response = await this.fetchWithRetry<HistoryResponse>(
       `${this.baseUrl}/history/${promptId}`
     );
@@ -477,16 +531,16 @@ export class ComfyUIClient {
       throw new ComfyUIError('Job not found or has no outputs', 'JOB_NOT_FOUND');
     }
 
-    const files: string[] = [];
+    const files: OutputFile[] = [];
     for (const output of Object.values(job.outputs)) {
       if (output.images) {
-        files.push(...output.images.map((img) => img.filename));
+        files.push(...output.images);
       }
       if (output.gifs) {
-        files.push(...output.gifs.map((gif) => gif.filename));
+        files.push(...output.gifs);
       }
       if (output.videos) {
-        files.push(...output.videos.map((vid) => vid.filename));
+        files.push(...output.videos);
       }
     }
 
@@ -561,7 +615,8 @@ export class ComfyUIClient {
     }
 
     onProgress?.(95, 'Downloading file');
-    const savedPath = await this.downloadFile(outputs[0], '', outputPath);
+    const output = outputs[0];
+    const savedPath = await this.downloadFile(output.filename, output.subfolder, outputPath);
 
     onProgress?.(100, 'Complete');
     return savedPath;
@@ -599,7 +654,8 @@ export class ComfyUIClient {
     }
 
     onProgress?.(95, 'Downloading file');
-    const savedPath = await this.downloadFile(outputs[0], '', outputPath);
+    const output = outputs[0];
+    const savedPath = await this.downloadFile(output.filename, output.subfolder, outputPath);
 
     onProgress?.(100, 'Complete');
     return savedPath;

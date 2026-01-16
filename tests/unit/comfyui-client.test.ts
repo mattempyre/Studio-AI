@@ -365,7 +365,7 @@ describe('ComfyUI Client', () => {
   });
 
   describe('getJobOutputs', () => {
-    it('should return image filenames from job outputs', async () => {
+    it('should return image file info from job outputs', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -384,10 +384,10 @@ describe('ComfyUI Client', () => {
 
       const outputs = await client.getJobOutputs('test-prompt-123');
 
-      expect(outputs).toEqual(['output_00001_.png']);
+      expect(outputs).toEqual([{ filename: 'output_00001_.png', subfolder: '', type: 'output' }]);
     });
 
-    it('should return video filenames from job outputs', async () => {
+    it('should return video file info from job outputs with subfolder', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -396,7 +396,7 @@ describe('ComfyUI Client', () => {
             outputs: {
               '8': {
                 videos: [
-                  { filename: 'output_00001_.mp4', subfolder: '', type: 'output' },
+                  { filename: 'output_00001_.mp4', subfolder: 'video', type: 'output' },
                 ],
               },
             },
@@ -406,7 +406,7 @@ describe('ComfyUI Client', () => {
 
       const outputs = await client.getJobOutputs('test-prompt-123');
 
-      expect(outputs).toEqual(['output_00001_.mp4']);
+      expect(outputs).toEqual([{ filename: 'output_00001_.mp4', subfolder: 'video', type: 'output' }]);
     });
 
     it('should throw when job not found', async () => {
