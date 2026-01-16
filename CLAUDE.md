@@ -5,6 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ```bash
+# All Servers (Recommended for Development)
+npm run dev:all      # Start frontend, backend, and Inngest together
+
 # Frontend
 npm install          # Install dependencies
 npm run dev          # Start Vite dev server on port 3000

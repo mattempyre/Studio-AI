@@ -6,7 +6,7 @@ services:
     image: inngest/inngest:latest
     ports:
       - "8288:8288"
-    command: dev -u http://host.docker.internal:3001/api/v1/inngest --no-poll
+    command: inngest dev -u http://host.docker.internal:3001/api/v1/inngest --no-poll
     environment:
       - INNGEST_LOG_LEVEL=info
     extra_hosts:
