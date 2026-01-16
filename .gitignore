@@ -26,3 +26,17 @@ dist-ssr
 # Auto Claude data directory
 .auto-claude/
 nul
+
+# Database and generated data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Drizzle migrations
+drizzle/

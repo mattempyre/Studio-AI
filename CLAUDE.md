@@ -5,21 +5,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ```bash
+# Frontend
 npm install          # Install dependencies
-npm run dev          # Start dev server on port 3000
+npm run dev          # Start Vite dev server on port 3000
 npm run build        # Production build
 npm run preview      # Preview production build
+
+# Backend
+npm run server       # Start Express server on port 3001 (with hot reload)
+npm run db:init      # Initialize SQLite database with schema
+npm run db:studio    # Open Drizzle Studio for database viewing
 ```
 
 ## Environment Setup
 
-Set `GEMINI_API_KEY` in `.env.local` with your Google Gemini API key.
+Copy `.env.example` to `.env.local` and configure:
+- `DEEPSEEK_API_KEY` - For script generation (future)
+- `COMFYUI_URL` - Local ComfyUI instance (future)
+- `CHATTERBOX_URL` - Local TTS service (future)
 
 ## Architecture
 
-**Tech Stack:** React 19, TypeScript, Vite, Tailwind CSS (via CDN), Google Gemini API
+**Tech Stack:**
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS (via CDN)
+- **Backend:** Node.js, Express, TypeScript, Drizzle ORM, SQLite
+- **APIs:** Deepseek (script), ComfyUI (image/video), Chatterbox (TTS)
 
-**State Management:** Lifted-state pattern in App.tsx - all global state (projects, user, characters, voices) flows down via props. No external state library.
+**Backend Structure:** (`src/backend/`)
+- `server.ts` - Express server entry point
+- `api/` - REST API routes (projects, characters, health)
+- `db/` - Drizzle ORM schema and database connection
+- `services/` - Business logic (future)
+- `clients/` - External service clients (future)
+
+**Database:** SQLite with Drizzle ORM. Tables: projects, sections, sentences, characters, generation_jobs.
+
+**State Management:** Frontend uses lifted-state pattern in App.tsx - all global state flows down via props.
 
 **Component Workflow:**
 ```
@@ -39,6 +60,10 @@ Each step in the creation pipeline handles a specific phase:
 | `services/geminiService.ts` | All Google Gemini API calls |
 | `types.ts` | TypeScript interfaces for Project, Scene, Character, AudioTrack, etc. |
 | `constants.ts` | Mock data and default values |
+| `src/backend/server.ts` | Express server entry point |
+| `src/backend/db/schema.ts` | Drizzle ORM database schema |
+| `src/backend/api/projects.ts` | Projects CRUD API endpoints |
+| `src/backend/api/characters.ts` | Characters CRUD API endpoints |
 
 ## Gemini API Integration
 
@@ -66,3 +91,13 @@ Core types in `types.ts`:
 - `AudioTrack` - Multi-track support (voice/music/sfx) with clips array
 - `Character` - Cast member with name, description, imageUrl
 - `Voice` - Platform or cloned voice for TTS
+
+## Testing Requirements
+
+When developing or modifying features:
+- Always check if tests exist for the feature being developed
+- If no tests exist, create comprehensive tests covering:
+  - Happy path scenarios
+  - Edge cases
+  - Error handling
+- Run tests to verify they pass before considering the feature complete
