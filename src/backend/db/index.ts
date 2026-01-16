@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database, { type Database as BetterSqlite3Database } from 'better-sqlite3';
 import { drizzle, BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema.js';
 import path from 'path';
@@ -9,14 +9,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Lazy database initialization
-let _sqlite: Database.Database | null = null;
+let _sqlite: BetterSqlite3Database | null = null;
 let _db: BetterSQLite3Database<typeof schema> | null = null;
 
 function getDbPath(): string {
   return process.env.DATABASE_PATH || path.join(__dirname, '../../../data/studio.db');
 }
 
-function initDb(): { sqlite: Database.Database; db: BetterSQLite3Database<typeof schema> } {
+function initDb(): { sqlite: BetterSqlite3Database; db: BetterSQLite3Database<typeof schema> } {
   if (_sqlite && _db) {
     return { sqlite: _sqlite, db: _db };
   }
@@ -50,7 +50,7 @@ export const db = new Proxy({} as BetterSQLite3Database<typeof schema>, {
 });
 
 // Getter for raw sqlite connection
-export const sqlite = new Proxy({} as Database.Database, {
+export const sqlite = new Proxy({} as BetterSqlite3Database, {
   get(_, prop) {
     const { sqlite } = initDb();
     return typeof (sqlite as any)[prop] === 'function'
