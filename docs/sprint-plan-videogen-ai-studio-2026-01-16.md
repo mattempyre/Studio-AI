@@ -3,8 +3,8 @@
 **Date:** 2026-01-16
 **Scrum Master:** matte
 **Project Level:** 3 (Complex)
-**Total Stories:** 35
-**Total Points:** 145
+**Total Stories:** 36
+**Total Points:** 150
 **Planned Sprints:** 5
 **Sprint Capacity:** 30 points/sprint
 
@@ -12,13 +12,13 @@
 
 ## Executive Summary
 
-This sprint plan breaks down the VideoGen AI Studio MVP into 35 implementable stories across 5 two-week sprints. The plan prioritizes infrastructure setup first, followed by core generation features, then UI and export capabilities.
+This sprint plan breaks down the VideoGen AI Studio MVP into 36 implementable stories across 5 two-week sprints. The plan prioritizes infrastructure setup first, followed by core generation features, then UI and export capabilities.
 
 **Key Metrics:**
 | Metric | Value |
 |--------|-------|
-| Total Stories | 35 |
-| Total Points | 145 |
+| Total Stories | 36 |
+| Total Points | 150 |
 | Sprints | 5 (10 weeks) |
 | Team Capacity | 30 points/sprint |
 | Target Completion | Late March 2026 |
@@ -145,7 +145,34 @@ As a developer, I want a Deepseek client so I can generate scripts from topics.
 
 ---
 
-#### STORY-006: WebSocket Progress Server
+#### STORY-006: Long-Form Script Generation
+**Epic:** Infrastructure
+**Priority:** Must Have
+**Points:** 5
+
+**User Story:**
+As a creator, I want to generate scripts for videos from 1 minute to 3 hours so I can create long-form content without repetition.
+
+**Acceptance Criteria:**
+- [ ] Generate script outlines with section targets (1-180 min)
+- [ ] Section-by-section generation with context passing
+- [ ] Running summary prevents repetition across sections
+- [ ] Support "auto" mode (topic → complete script)
+- [ ] Support "outline-first" mode (topic → outline → review → generate)
+- [ ] Real-time progress updates via SSE
+- [ ] Resume interrupted generation from saved state
+
+**Technical Notes:**
+- Implements AgentWrite pattern with recursive summarization
+- New `script_outlines` table for outline storage
+- Extends DeepseekClient with `generateOutline()`, `generateSectionWithContext()`, `compressSummary()`
+- See `docs/stories/STORY-006-long-form-script-generation.md` for full spec
+
+**Dependencies:** STORY-005
+
+---
+
+#### STORY-007: WebSocket Progress Server
 **Epic:** Infrastructure
 **Priority:** Must Have
 **Points:** 3
@@ -170,7 +197,7 @@ As a developer, I want a WebSocket server so I can push real-time progress updat
 
 ### EPIC-01: Script Management (FR-1xx)
 
-#### STORY-007: Project CRUD API
+#### STORY-008: Project CRUD API
 **Epic:** Script Management
 **Priority:** Must Have
 **Points:** 3
@@ -193,7 +220,7 @@ As a creator, I want to create and manage projects so I can organize my video pr
 
 ---
 
-#### STORY-008: AI Script Generation
+#### STORY-009: AI Script Generation
 **Epic:** Script Management
 **Priority:** Must Have
 **Points:** 5
@@ -213,12 +240,12 @@ As a creator, I want to enter a topic and have AI generate a segmented script so
 - Use Inngest for async generation
 - Parse Deepseek response into sections/sentences
 
-**Dependencies:** STORY-005, STORY-006, STORY-007
+**Dependencies:** STORY-005, STORY-007, STORY-008
 **FRs Covered:** FR-101, FR-103, FR-104, FR-105
 
 ---
 
-#### STORY-009: Script Editor Component
+#### STORY-010: Script Editor Component
 **Epic:** Script Management
 **Priority:** Must Have
 **Points:** 5
@@ -238,14 +265,14 @@ As a creator, I want to edit my script with section/sentence structure visible s
 - Use existing React patterns from codebase
 - Mark sentences as "dirty" when edited
 
-**Dependencies:** STORY-007
+**Dependencies:** STORY-008
 **FRs Covered:** FR-102, FR-104
 
 ---
 
 ### EPIC-02: Character System (FR-2xx)
 
-#### STORY-010: Character Library CRUD
+#### STORY-011: Character Library CRUD
 **Epic:** Character System
 **Priority:** Must Have
 **Points:** 3
@@ -268,7 +295,7 @@ As a creator, I want to manage a library of characters so I can reuse them acros
 
 ---
 
-#### STORY-011: Character Library UI
+#### STORY-012: Character Library UI
 **Epic:** Character System
 **Priority:** Must Have
 **Points:** 3
@@ -286,12 +313,12 @@ As a creator, I want a character library panel so I can browse and manage my cha
 **Technical Notes:**
 - Reuse existing panel patterns
 
-**Dependencies:** STORY-010
+**Dependencies:** STORY-011
 **FRs Covered:** FR-201, FR-203
 
 ---
 
-#### STORY-012: Project Cast Management
+#### STORY-013: Project Cast Management
 **Epic:** Character System
 **Priority:** Must Have
 **Points:** 2
@@ -309,14 +336,14 @@ As a creator, I want to add characters to my project cast so they're included in
 **Technical Notes:**
 - Many-to-many relationship via project_cast table
 
-**Dependencies:** STORY-010, STORY-007
+**Dependencies:** STORY-011, STORY-008
 **FRs Covered:** FR-204
 
 ---
 
 ### EPIC-03: Voice Generation (FR-3xx)
 
-#### STORY-013: Audio Generation Job
+#### STORY-014: Audio Generation Job
 **Epic:** Voice Generation
 **Priority:** Must Have
 **Points:** 5
@@ -341,7 +368,7 @@ As a creator, I want audio automatically generated for each sentence so I have n
 
 ---
 
-#### STORY-014: Voice Selection UI
+#### STORY-015: Voice Selection UI
 **Epic:** Voice Generation
 **Priority:** Must Have
 **Points:** 2
@@ -359,12 +386,12 @@ As a creator, I want to select from different voices so I can pick one that fits
 **Technical Notes:**
 - Store sample audio files in public/voices/
 
-**Dependencies:** STORY-009
+**Dependencies:** STORY-010
 **FRs Covered:** FR-304
 
 ---
 
-#### STORY-015: Bulk Audio Generation
+#### STORY-016: Bulk Audio Generation
 **Epic:** Voice Generation
 **Priority:** Must Have
 **Points:** 3
@@ -382,14 +409,14 @@ As a creator, I want to generate audio for all sentences at once so I can procee
 **Technical Notes:**
 - Queue events in order, Inngest handles parallelism
 
-**Dependencies:** STORY-013, STORY-009
+**Dependencies:** STORY-014, STORY-010
 **FRs Covered:** FR-302
 
 ---
 
 ### EPIC-04: Image Generation (FR-4xx)
 
-#### STORY-016: Image Prompt Generation
+#### STORY-017: Image Prompt Generation
 **Epic:** Image Generation
 **Priority:** Must Have
 **Points:** 3
@@ -408,12 +435,12 @@ As a creator, I want image prompts automatically generated from my script so I d
 - Use Deepseek for prompt generation
 - Batch process to reduce API calls
 
-**Dependencies:** STORY-005, STORY-012
+**Dependencies:** STORY-005, STORY-013
 **FRs Covered:** FR-403
 
 ---
 
-#### STORY-017: Image Generation Job
+#### STORY-018: Image Generation Job
 **Epic:** Image Generation
 **Priority:** Must Have
 **Points:** 8
@@ -434,12 +461,12 @@ As a creator, I want images generated via ComfyUI so I have visuals for each sen
 - Concurrency: 1 (GPU-bound)
 - Workflow: workflows/image/flux-2.json
 
-**Dependencies:** STORY-002, STORY-003, STORY-016
+**Dependencies:** STORY-002, STORY-003, STORY-017
 **FRs Covered:** FR-401, FR-402, FR-404, FR-407
 
 ---
 
-#### STORY-018: Image Regeneration & Override
+#### STORY-019: Image Regeneration & Override
 **Epic:** Image Generation
 **Priority:** Must Have
 **Points:** 3
@@ -457,14 +484,14 @@ As a creator, I want to edit image prompts and regenerate individual images so I
 **Technical Notes:**
 - Triggers single image/generate event
 
-**Dependencies:** STORY-017
+**Dependencies:** STORY-018
 **FRs Covered:** FR-406, FR-408
 
 ---
 
 ### EPIC-05: Video Generation (FR-5xx)
 
-#### STORY-019: Video Generation Job
+#### STORY-020: Video Generation Job
 **Epic:** Video Generation
 **Priority:** Must Have
 **Points:** 8
@@ -485,12 +512,12 @@ As a creator, I want images converted to video clips so my content has motion.
 - Concurrency: 1 (GPU-bound)
 - Workflow: workflows/video/wan-2.2.json
 
-**Dependencies:** STORY-002, STORY-003, STORY-017
+**Dependencies:** STORY-002, STORY-003, STORY-018
 **FRs Covered:** FR-501, FR-502, FR-506
 
 ---
 
-#### STORY-020: Camera Movement Controls
+#### STORY-021: Camera Movement Controls
 **Epic:** Video Generation
 **Priority:** Must Have
 **Points:** 3
@@ -508,12 +535,12 @@ As a creator, I want to select camera movements so each scene has appropriate mo
 **Technical Notes:**
 - Default: Static, 50% strength
 
-**Dependencies:** STORY-019
+**Dependencies:** STORY-020
 **FRs Covered:** FR-503, FR-504
 
 ---
 
-#### STORY-021: Video Regeneration & Override
+#### STORY-022: Video Regeneration & Override
 **Epic:** Video Generation
 **Priority:** Must Have
 **Points:** 3
@@ -531,14 +558,14 @@ As a creator, I want to edit video prompts and regenerate individual videos so I
 **Technical Notes:**
 - Triggers single video/generate event
 
-**Dependencies:** STORY-019
+**Dependencies:** STORY-020
 **FRs Covered:** FR-505, FR-508
 
 ---
 
 ### EPIC-06: Storyboard UI (FR-6xx)
 
-#### STORY-022: Storyboard Table View
+#### STORY-023: Storyboard Table View
 **Epic:** Storyboard UI
 **Priority:** Must Have
 **Points:** 5
@@ -556,12 +583,12 @@ As a creator, I want a table view of all scenes so I can see the linear flow.
 **Technical Notes:**
 - Use virtualized list for 20+ min videos (400+ rows)
 
-**Dependencies:** STORY-009, STORY-017
+**Dependencies:** STORY-010, STORY-018
 **FRs Covered:** FR-601
 
 ---
 
-#### STORY-023: Storyboard Grid View
+#### STORY-024: Storyboard Grid View
 **Epic:** Storyboard UI
 **Priority:** Must Have
 **Points:** 5
@@ -579,12 +606,12 @@ As a creator, I want a grid view of all scenes so I can see the visual overview.
 **Technical Notes:**
 - Responsive grid layout
 
-**Dependencies:** STORY-022
+**Dependencies:** STORY-023
 **FRs Covered:** FR-602
 
 ---
 
-#### STORY-024: Scene Inspector Panel
+#### STORY-025: Scene Inspector Panel
 **Epic:** Storyboard UI
 **Priority:** Must Have
 **Points:** 5
@@ -602,12 +629,12 @@ As a creator, I want a scene inspector panel so I can view and edit scene detail
 **Technical Notes:**
 - Slide-in panel on scene selection
 
-**Dependencies:** STORY-022, STORY-018, STORY-021
+**Dependencies:** STORY-023, STORY-019, STORY-022
 **FRs Covered:** FR-603, FR-605
 
 ---
 
-#### STORY-025: Section Navigation Sidebar
+#### STORY-026: Section Navigation Sidebar
 **Epic:** Storyboard UI
 **Priority:** Must Have
 **Points:** 2
@@ -625,12 +652,12 @@ As a creator, I want section navigation so I can quickly jump to specific parts.
 **Technical Notes:**
 - Sticky sidebar
 
-**Dependencies:** STORY-022
+**Dependencies:** STORY-023
 **FRs Covered:** FR-604
 
 ---
 
-#### STORY-026: Bulk Scene Generation
+#### STORY-027: Bulk Scene Generation
 **Epic:** Storyboard UI
 **Priority:** Must Have
 **Points:** 3
@@ -648,14 +675,14 @@ As a creator, I want to generate all images and videos at once so I can proceed 
 **Technical Notes:**
 - Queue all events at once
 
-**Dependencies:** STORY-015, STORY-017, STORY-019
+**Dependencies:** STORY-016, STORY-018, STORY-020
 **FRs Covered:** FR-606
 
 ---
 
 ### EPIC-07: Export System (FR-7xx)
 
-#### STORY-027: Export Service
+#### STORY-028: Export Service
 **Epic:** Export System
 **Priority:** Must Have
 **Points:** 5
@@ -674,12 +701,12 @@ As a creator, I want to export all assets with proper naming so I can import int
 **Technical Notes:**
 - Use archiver for zip creation
 
-**Dependencies:** STORY-017, STORY-019
+**Dependencies:** STORY-018, STORY-020
 **FRs Covered:** FR-701, FR-702, FR-703, FR-705
 
 ---
 
-#### STORY-028: Export UI & Download
+#### STORY-029: Export UI & Download
 **Epic:** Export System
 **Priority:** Must Have
 **Points:** 3
@@ -697,12 +724,12 @@ As a creator, I want an export button that downloads my project assets as a zip 
 **Technical Notes:**
 - Use browser download API
 
-**Dependencies:** STORY-027
+**Dependencies:** STORY-028
 **FRs Covered:** FR-704
 
 ---
 
-#### STORY-029: Export Metadata
+#### STORY-030: Export Metadata
 **Epic:** Export System
 **Priority:** Should Have
 **Points:** 2
@@ -719,14 +746,14 @@ As a creator, I want metadata.json included in exports so I have project informa
 **Technical Notes:**
 - JSON structure for potential re-import
 
-**Dependencies:** STORY-027
+**Dependencies:** STORY-028
 **FRs Covered:** FR-706
 
 ---
 
 ### EPIC-08: Cascading Regeneration (FR-8xx)
 
-#### STORY-030: Dependency Tracking
+#### STORY-031: Dependency Tracking
 **Epic:** Cascading Regen
 **Priority:** Must Have
 **Points:** 3
@@ -749,7 +776,7 @@ As a creator, I want the system to track asset dependencies so changes cascade c
 
 ---
 
-#### STORY-031: Sentence Edit Regeneration
+#### STORY-032: Sentence Edit Regeneration
 **Epic:** Cascading Regen
 **Priority:** Must Have
 **Points:** 5
@@ -767,12 +794,12 @@ As a creator, I want only affected assets to regenerate when I edit a sentence s
 **Technical Notes:**
 - Event chain: audio → image → video
 
-**Dependencies:** STORY-030, STORY-013, STORY-017, STORY-019
+**Dependencies:** STORY-031, STORY-014, STORY-018, STORY-020
 **FRs Covered:** FR-802, FR-804
 
 ---
 
-#### STORY-032: Prompt Edit Regeneration
+#### STORY-033: Prompt Edit Regeneration
 **Epic:** Cascading Regen
 **Priority:** Must Have
 **Points:** 3
@@ -789,14 +816,14 @@ As a creator, I want downstream assets to regenerate when I edit a prompt.
 **Technical Notes:**
 - Use Inngest event chaining
 
-**Dependencies:** STORY-030, STORY-018, STORY-021
+**Dependencies:** STORY-031, STORY-019, STORY-022
 **FRs Covered:** FR-805
 
 ---
 
 ### Polish & Integration Stories
 
-#### STORY-033: Progress Dashboard
+#### STORY-034: Progress Dashboard
 **Epic:** Polish
 **Priority:** Must Have
 **Points:** 3
@@ -814,12 +841,12 @@ As a creator, I want to see overall generation progress so I know when my projec
 **Technical Notes:**
 - Subscribe to WebSocket events
 
-**Dependencies:** STORY-006, STORY-026
+**Dependencies:** STORY-007, STORY-027
 **FRs Covered:** NFR-006
 
 ---
 
-#### STORY-034: Error Handling & Retry UI
+#### STORY-035: Error Handling & Retry UI
 **Epic:** Polish
 **Priority:** Must Have
 **Points:** 3
@@ -837,12 +864,12 @@ As a creator, I want clear error messages and retry options so I can recover fro
 **Technical Notes:**
 - Error messages from Inngest stored in DB
 
-**Dependencies:** STORY-024
+**Dependencies:** STORY-025
 **FRs Covered:** NFR-004
 
 ---
 
-#### STORY-035: Project Dashboard
+#### STORY-036: Project Dashboard
 **Epic:** Polish
 **Priority:** Must Have
 **Points:** 3
@@ -860,7 +887,7 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 **Technical Notes:**
 - Use first image as project thumbnail
 
-**Dependencies:** STORY-007
+**Dependencies:** STORY-008
 **FRs Covered:** -
 
 ---
@@ -880,8 +907,8 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 | STORY-003 | ComfyUI Client Integration | 5 | Must |
 | STORY-004 | Chatterbox TTS Client Integration | 3 | Must |
 | STORY-005 | Deepseek API Client Integration | 3 | Must |
-| STORY-006 | WebSocket Progress Server | 3 | Must |
-| STORY-007 | Project CRUD API | 3 | Must |
+| STORY-007 | WebSocket Progress Server | 3 | Must |
+| STORY-008 | Project CRUD API | 3 | Must |
 
 **Sprint 1 Total:** 27 points
 
@@ -901,22 +928,24 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 **Goal:** Complete script generation and audio pipeline
 
 **Capacity:** 30 points
-**Committed:** 28 points (93%)
+**Committed:** 33 points (110%) - *Consider moving 1 story to Sprint 3*
 
 | Story | Title | Points | Priority |
 |-------|-------|--------|----------|
-| STORY-008 | AI Script Generation | 5 | Must |
-| STORY-009 | Script Editor Component | 5 | Must |
-| STORY-010 | Character Library CRUD | 3 | Must |
-| STORY-011 | Character Library UI | 3 | Must |
-| STORY-012 | Project Cast Management | 2 | Must |
-| STORY-013 | Audio Generation Job | 5 | Must |
-| STORY-014 | Voice Selection UI | 2 | Must |
-| STORY-015 | Bulk Audio Generation | 3 | Must |
+| STORY-006 | Long-Form Script Generation | 5 | Must |
+| STORY-009 | AI Script Generation | 5 | Must |
+| STORY-010 | Script Editor Component | 5 | Must |
+| STORY-011 | Character Library CRUD | 3 | Must |
+| STORY-012 | Character Library UI | 3 | Must |
+| STORY-013 | Project Cast Management | 2 | Must |
+| STORY-014 | Audio Generation Job | 5 | Must |
+| STORY-015 | Voice Selection UI | 2 | Must |
+| STORY-016 | Bulk Audio Generation | 3 | Must |
 
-**Sprint 2 Total:** 28 points
+**Sprint 2 Total:** 33 points
 
 **Deliverables:**
+- Can generate long-form scripts (1 min to 3 hours)
 - Can generate script from topic
 - Can edit script in UI
 - Can manage characters
@@ -936,12 +965,12 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 
 | Story | Title | Points | Priority |
 |-------|-------|--------|----------|
-| STORY-016 | Image Prompt Generation | 3 | Must |
-| STORY-017 | Image Generation Job | 8 | Must |
-| STORY-018 | Image Regeneration & Override | 3 | Must |
-| STORY-022 | Storyboard Table View | 5 | Must |
-| STORY-023 | Storyboard Grid View | 5 | Must |
-| STORY-030 | Dependency Tracking | 3 | Must |
+| STORY-017 | Image Prompt Generation | 3 | Must |
+| STORY-018 | Image Generation Job | 8 | Must |
+| STORY-019 | Image Regeneration & Override | 3 | Must |
+| STORY-023 | Storyboard Table View | 5 | Must |
+| STORY-024 | Storyboard Grid View | 5 | Must |
+| STORY-031 | Dependency Tracking | 3 | Must |
 
 **Sprint 3 Total:** 27 points
 
@@ -965,13 +994,13 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 
 | Story | Title | Points | Priority |
 |-------|-------|--------|----------|
-| STORY-019 | Video Generation Job | 8 | Must |
-| STORY-020 | Camera Movement Controls | 3 | Must |
-| STORY-021 | Video Regeneration & Override | 3 | Must |
-| STORY-024 | Scene Inspector Panel | 5 | Must |
-| STORY-025 | Section Navigation Sidebar | 2 | Must |
-| STORY-026 | Bulk Scene Generation | 3 | Must |
-| STORY-031 | Sentence Edit Regeneration | 5 | Must |
+| STORY-020 | Video Generation Job | 8 | Must |
+| STORY-021 | Camera Movement Controls | 3 | Must |
+| STORY-022 | Video Regeneration & Override | 3 | Must |
+| STORY-025 | Scene Inspector Panel | 5 | Must |
+| STORY-026 | Section Navigation Sidebar | 2 | Must |
+| STORY-027 | Bulk Scene Generation | 3 | Must |
+| STORY-032 | Sentence Edit Regeneration | 5 | Must |
 
 **Sprint 4 Total:** 29 points
 
@@ -996,13 +1025,13 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 
 | Story | Title | Points | Priority |
 |-------|-------|--------|----------|
-| STORY-027 | Export Service | 5 | Must |
-| STORY-028 | Export UI & Download | 3 | Must |
-| STORY-029 | Export Metadata | 2 | Should |
-| STORY-032 | Prompt Edit Regeneration | 3 | Must |
-| STORY-033 | Progress Dashboard | 3 | Must |
-| STORY-034 | Error Handling & Retry UI | 3 | Must |
-| STORY-035 | Project Dashboard | 3 | Must |
+| STORY-028 | Export Service | 5 | Must |
+| STORY-029 | Export UI & Download | 3 | Must |
+| STORY-030 | Export Metadata | 2 | Should |
+| STORY-033 | Prompt Edit Regeneration | 3 | Must |
+| STORY-034 | Progress Dashboard | 3 | Must |
+| STORY-035 | Error Handling & Retry UI | 3 | Must |
+| STORY-036 | Project Dashboard | 3 | Must |
 
 **Sprint 5 Total:** 22 points
 
@@ -1025,16 +1054,16 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 
 | Epic ID | Epic Name | Stories | Total Points | Sprints |
 |---------|-----------|---------|--------------|---------|
-| EPIC-00 | Infrastructure | 001-006 | 24 | 1 |
-| EPIC-01 | Script Management | 007-009 | 13 | 1-2 |
-| EPIC-02 | Character System | 010-012 | 8 | 2 |
-| EPIC-03 | Voice Generation | 013-015 | 10 | 2 |
-| EPIC-04 | Image Generation | 016-018 | 14 | 3 |
-| EPIC-05 | Video Generation | 019-021 | 14 | 4 |
-| EPIC-06 | Storyboard UI | 022-026 | 20 | 3-4 |
-| EPIC-07 | Export System | 027-029 | 10 | 5 |
-| EPIC-08 | Cascading Regen | 030-032 | 11 | 3-4 |
-| EPIC-09 | Polish | 033-035 | 9 | 5 |
+| EPIC-00 | Infrastructure | 001-007 | 29 | 1-2 |
+| EPIC-01 | Script Management | 008-010 | 13 | 1-2 |
+| EPIC-02 | Character System | 011-013 | 8 | 2 |
+| EPIC-03 | Voice Generation | 014-016 | 10 | 2 |
+| EPIC-04 | Image Generation | 017-019 | 14 | 3 |
+| EPIC-05 | Video Generation | 020-022 | 14 | 4 |
+| EPIC-06 | Storyboard UI | 023-027 | 20 | 3-4 |
+| EPIC-07 | Export System | 028-030 | 10 | 5 |
+| EPIC-08 | Cascading Regen | 031-033 | 11 | 3-4 |
+| EPIC-09 | Polish | 034-036 | 9 | 5 |
 
 ---
 
@@ -1042,54 +1071,54 @@ As a creator, I want a dashboard to see all my projects so I can manage multiple
 
 | FR ID | Requirement | Story | Sprint |
 |-------|-------------|-------|--------|
-| FR-101 | AI script generation | STORY-008 | 2 |
-| FR-102 | Manual script editing | STORY-009 | 2 |
-| FR-103 | Auto-segmentation | STORY-008 | 2 |
-| FR-104 | Sentence-level granularity | STORY-008, 009 | 2 |
-| FR-105 | Search grounding toggle | STORY-008 | 2 |
-| FR-106 | Target duration selection | STORY-007 | 1 |
-| FR-107 | Visual style presets | STORY-007 | 1 |
-| FR-201 | Character library | STORY-010, 011 | 2 |
-| FR-202 | LoRA support | STORY-010 | 2 |
-| FR-203 | Character descriptions | STORY-010, 011 | 2 |
-| FR-204 | Add to project cast | STORY-012 | 2 |
-| FR-301 | TTS via Chatterbox | STORY-013 | 2 |
-| FR-302 | Audio per sentence | STORY-013, 015 | 2 |
-| FR-303 | Auto-regeneration | STORY-031 | 4 |
-| FR-304 | Voice selection | STORY-014 | 2 |
-| FR-401 | ComfyUI integration | STORY-017 | 3 |
-| FR-402 | Multiple image models | STORY-017 | 3 |
-| FR-403 | Auto prompt generation | STORY-016 | 3 |
-| FR-404 | Character reference injection | STORY-017 | 3 |
-| FR-405 | Style LoRA application | STORY-017 | 3 |
-| FR-406 | Manual prompt override | STORY-018 | 3 |
-| FR-407 | 16:9 aspect ratio | STORY-017 | 3 |
-| FR-408 | Regenerate individual images | STORY-018 | 3 |
-| FR-501 | ComfyUI video workflow | STORY-019 | 4 |
-| FR-502 | Image-to-video | STORY-019 | 4 |
-| FR-503 | Camera movement presets | STORY-020 | 4 |
-| FR-504 | Motion strength control | STORY-020 | 4 |
-| FR-505 | Manual video prompt override | STORY-021 | 4 |
-| FR-506 | Multiple video models | STORY-019 | 4 |
-| FR-507 | 20 min combined video | STORY-019 | 4 |
-| FR-508 | Regenerate individual videos | STORY-021 | 4 |
-| FR-601 | Table view | STORY-022 | 3 |
-| FR-602 | Grid view | STORY-023 | 3 |
-| FR-603 | Scene inspector | STORY-024 | 4 |
-| FR-604 | Section navigation | STORY-025 | 4 |
-| FR-605 | Regenerate buttons | STORY-024 | 4 |
-| FR-606 | Generate scenes from script | STORY-026 | 4 |
-| FR-701 | Sequential file naming | STORY-027 | 5 |
-| FR-702 | Batch export | STORY-027 | 5 |
-| FR-703 | Folder structure | STORY-027 | 5 |
-| FR-704 | NLE-compatible | STORY-028 | 5 |
-| FR-705 | Include script.txt | STORY-027 | 5 |
-| FR-706 | Include metadata.json | STORY-029 | 5 |
-| FR-801 | Track dependencies | STORY-030 | 3 |
-| FR-802 | Minimal regeneration | STORY-031 | 4 |
-| FR-803 | Section edit regen | STORY-031 | 4 |
-| FR-804 | Sentence edit regen | STORY-031 | 4 |
-| FR-805 | Prompt edit regen | STORY-032 | 5 |
+| FR-101 | AI script generation | STORY-009 | 2 |
+| FR-102 | Manual script editing | STORY-010 | 2 |
+| FR-103 | Auto-segmentation | STORY-009 | 2 |
+| FR-104 | Sentence-level granularity | STORY-009, 009 | 2 |
+| FR-105 | Search grounding toggle | STORY-009 | 2 |
+| FR-106 | Target duration selection | STORY-008 | 1 |
+| FR-107 | Visual style presets | STORY-008 | 1 |
+| FR-201 | Character library | STORY-011, 011 | 2 |
+| FR-202 | LoRA support | STORY-011 | 2 |
+| FR-203 | Character descriptions | STORY-011, 011 | 2 |
+| FR-204 | Add to project cast | STORY-013 | 2 |
+| FR-301 | TTS via Chatterbox | STORY-014 | 2 |
+| FR-302 | Audio per sentence | STORY-014, 015 | 2 |
+| FR-303 | Auto-regeneration | STORY-032 | 4 |
+| FR-304 | Voice selection | STORY-015 | 2 |
+| FR-401 | ComfyUI integration | STORY-018 | 3 |
+| FR-402 | Multiple image models | STORY-018 | 3 |
+| FR-403 | Auto prompt generation | STORY-017 | 3 |
+| FR-404 | Character reference injection | STORY-018 | 3 |
+| FR-405 | Style LoRA application | STORY-018 | 3 |
+| FR-406 | Manual prompt override | STORY-019 | 3 |
+| FR-407 | 16:9 aspect ratio | STORY-018 | 3 |
+| FR-408 | Regenerate individual images | STORY-019 | 3 |
+| FR-501 | ComfyUI video workflow | STORY-020 | 4 |
+| FR-502 | Image-to-video | STORY-020 | 4 |
+| FR-503 | Camera movement presets | STORY-021 | 4 |
+| FR-504 | Motion strength control | STORY-021 | 4 |
+| FR-505 | Manual video prompt override | STORY-022 | 4 |
+| FR-506 | Multiple video models | STORY-020 | 4 |
+| FR-507 | 20 min combined video | STORY-020 | 4 |
+| FR-508 | Regenerate individual videos | STORY-022 | 4 |
+| FR-601 | Table view | STORY-023 | 3 |
+| FR-602 | Grid view | STORY-024 | 3 |
+| FR-603 | Scene inspector | STORY-025 | 4 |
+| FR-604 | Section navigation | STORY-026 | 4 |
+| FR-605 | Regenerate buttons | STORY-025 | 4 |
+| FR-606 | Generate scenes from script | STORY-027 | 4 |
+| FR-701 | Sequential file naming | STORY-028 | 5 |
+| FR-702 | Batch export | STORY-028 | 5 |
+| FR-703 | Folder structure | STORY-028 | 5 |
+| FR-704 | NLE-compatible | STORY-029 | 5 |
+| FR-705 | Include script.txt | STORY-028 | 5 |
+| FR-706 | Include metadata.json | STORY-030 | 5 |
+| FR-801 | Track dependencies | STORY-031 | 3 |
+| FR-802 | Minimal regeneration | STORY-032 | 4 |
+| FR-803 | Section edit regen | STORY-032 | 4 |
+| FR-804 | Sentence edit regen | STORY-032 | 4 |
+| FR-805 | Prompt edit regen | STORY-033 | 5 |
 
 **Coverage:** 100% of Must Have FRs (45/45)
 
