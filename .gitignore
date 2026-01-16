@@ -25,3 +25,4 @@ dist-ssr
 
 # Auto Claude data directory
 .auto-claude/
+nul
