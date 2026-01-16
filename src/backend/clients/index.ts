@@ -23,6 +23,8 @@ export {
   type GeneratedSection,
   type GeneratedSentence,
 } from './deepseek.js';
+
+export {
   ChatterboxClient,
   ChatterboxError,
   createChatterboxClient,

@@ -13,7 +13,7 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
+.vscode/*1
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -47,3 +47,4 @@ coverage/
 # Local config (user-specific)
 .bmad/
 .claude/
+image_test/family.jpg
