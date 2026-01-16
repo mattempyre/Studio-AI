@@ -5,12 +5,15 @@ import { db } from './db/index.js';
 import { projectsRouter } from './api/projects.js';
 import { charactersRouter } from './api/characters.js';
 import { healthRouter } from './api/health.js';
+import { inngestHandler } from './api/inngest.js';
+import { inngest } from './inngest/index.js';
 
 // Load environment variables
 config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const INNGEST_DEV_SERVER = process.env.INNGEST_DEV_SERVER || 'http://localhost:8288';
 
 // Middleware
 app.use(cors({
@@ -29,10 +32,47 @@ app.use((req, res, next) => {
   next();
 });
 
+// Inngest serve endpoint - handles function registration and invocation
+// This must be registered before other routes to ensure Inngest can reach it
+app.use('/api/v1/inngest', inngestHandler);
+
 // API Routes
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/characters', charactersRouter);
+
+// Test endpoint to trigger Inngest events (development only)
+if (process.env.NODE_ENV !== 'production') {
+  app.post('/api/v1/test/inngest-hello', async (req, res) => {
+    try {
+      const message = req.body.message || 'Hello from VideoGen AI Studio!';
+
+      // Send an event to Inngest
+      await inngest.send({
+        name: 'test/hello',
+        data: { message },
+      });
+
+      res.json({
+        success: true,
+        message: 'Event sent to Inngest successfully',
+        event: {
+          name: 'test/hello',
+          data: { message },
+        },
+      });
+    } catch (error) {
+      console.error('Failed to send Inngest event:', error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: 'INNGEST_ERROR',
+          message: error instanceof Error ? error.message : 'Failed to send event to Inngest',
+        },
+      });
+    }
+  });
+}
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -66,11 +106,16 @@ app.listen(PORT, () => {
 ║                                                            ║
 ║   API:      http://localhost:${PORT}/api/v1                   ║
 ║   Health:   http://localhost:${PORT}/api/v1/health            ║
+║   Inngest:  http://localhost:${PORT}/api/v1/inngest           ║
 ║                                                            ║
-║   Run 'npm run db:studio' to open Drizzle Studio           ║
+║   Inngest Dev Server: ${INNGEST_DEV_SERVER}                  ║
+║                                                            ║
+║   Commands:                                                 ║
+║   - npm run db:studio     Open Drizzle Studio              ║
+║   - docker-compose up -d  Start Inngest dev server         ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
   `);
 });
 
-export { app, db };
+export { app, db, inngest };
