@@ -19,12 +19,8 @@ services:
 
 # Future services (to be added in later stories):
 #
-#   chatterbox:
-#     image: chatterbox-tts:latest
-#     volumes:
-#       - ./models:/models
-#     ports:
-#       - "8080:8080"
+# Note: Chatterbox TTS is expected to be running externally on port 8004
+# Configure CHATTERBOX_URL in .env.local if using a different address
 #
 #   comfyui:
 #     image: comfyui:latest

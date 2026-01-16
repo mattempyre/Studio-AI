@@ -23,3 +23,14 @@ export {
   type GeneratedSection,
   type GeneratedSentence,
 } from './deepseek.js';
+  ChatterboxClient,
+  ChatterboxError,
+  createChatterboxClient,
+  getWavDurationMs,
+  VOICE_PRESETS,
+  type ChatterboxClientOptions,
+  type ChatterboxVoice,
+  type VoiceInfo,
+  type SpeechGenerationParams,
+  type SpeechGenerationResult,
+} from './chatterbox.js';
