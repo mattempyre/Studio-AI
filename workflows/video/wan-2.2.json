@@ -1,0 +1,100 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.png"
+    },
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "2": {
+    "class_type": "ImageOnlyCheckpointLoader",
+    "inputs": {
+      "ckpt_name": "svd_xt_1_1.safetensors"
+    },
+    "_meta": {
+      "title": "Load SVD Checkpoint"
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "A smooth camera pan across the scene",
+      "clip": ["2", 1]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "static, no motion, freeze frame",
+      "clip": ["2", 1]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "5": {
+    "class_type": "SVD_img2vid_Conditioning",
+    "inputs": {
+      "width": 1920,
+      "height": 1080,
+      "video_frames": 25,
+      "motion_bucket_id": 127,
+      "fps": 24,
+      "augmentation_level": 0,
+      "clip_vision": ["2", 1],
+      "init_image": ["1", 0],
+      "vae": ["2", 2]
+    },
+    "_meta": {
+      "title": "SVD img2vid Conditioning"
+    }
+  },
+  "6": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 20,
+      "cfg": 2.5,
+      "sampler_name": "euler",
+      "scheduler": "karras",
+      "denoise": 1,
+      "model": ["2", 0],
+      "positive": ["5", 0],
+      "negative": ["5", 1],
+      "latent_image": ["5", 2]
+    },
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "7": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["6", 0],
+      "vae": ["2", 2]
+    },
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "8": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "output",
+      "format": "video/h264-mp4",
+      "pingpong": false,
+      "save_output": true,
+      "images": ["7", 0]
+    },
+    "_meta": {
+      "title": "Video Combine"
+    }
+  }
+}
