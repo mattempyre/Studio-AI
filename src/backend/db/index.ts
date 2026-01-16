@@ -49,8 +49,8 @@ export const db = new Proxy({} as BetterSQLite3Database<typeof schema>, {
   },
 });
 
-// Getter for raw sqlite connection
-export const sqlite = new Proxy({} as BetterSqlite3Database, {
+// Getter for raw sqlite connection - typed as the re-exported type
+export const sqlite: BetterSqlite3Database = new Proxy({} as BetterSqlite3Database, {
   get(_, prop) {
     const { sqlite } = initDb();
     return typeof (sqlite as any)[prop] === 'function'
@@ -58,6 +58,9 @@ export const sqlite = new Proxy({} as BetterSqlite3Database, {
       : (sqlite as any)[prop];
   },
 });
+
+// Re-export the SQLite type for use in other modules
+export type { BetterSqlite3Database as SqliteDatabase };
 
 // Export schema for convenience
 export * from './schema.js';
