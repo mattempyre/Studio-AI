@@ -40,3 +40,10 @@ data/
 
 # Drizzle migrations
 drizzle/
+
+# Test coverage
+coverage/
+
+# Local config (user-specific)
+.bmad/
+.claude/
