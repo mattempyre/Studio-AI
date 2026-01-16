@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # Inngest Dev Server - Job queue orchestration
+  inngest:
+    image: inngest/inngest:latest
+    ports:
+      - "8288:8288"
+    command: dev -u http://host.docker.internal:3001/api/v1/inngest --no-poll
+    environment:
+      - INNGEST_LOG_LEVEL=info
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8288/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+# Future services (to be added in later stories):
+#
+#   chatterbox:
+#     image: chatterbox-tts:latest
+#     volumes:
+#       - ./models:/models
+#     ports:
+#       - "8080:8080"
+#
+#   comfyui:
+#     image: comfyui:latest
+#     volumes:
+#       - ./models:/models
+#       - ./workflows:/workflows
+#     ports:
+#       - "8188:8188"
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               count: 1
+#               capabilities: [gpu]
