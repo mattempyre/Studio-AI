@@ -9,7 +9,7 @@ export type StudioEvents = {
     };
   };
 
-  // Script generation events
+  // Script generation events (short-form, <10 min)
   'script/generate': {
     data: {
       projectId: string;
@@ -23,6 +23,43 @@ export type StudioEvents = {
       projectId: string;
       sectionCount: number;
       sentenceCount: number;
+    };
+  };
+
+  // Long-form script generation events (10+ min, up to 3 hours)
+  'script/generate-long': {
+    data: {
+      projectId: string;
+      outlineId?: string; // If using existing outline (from-outline mode)
+      topic: string;
+      targetDurationMinutes: number;
+      visualStyle: string;
+      mode: 'auto' | 'from-outline';
+    };
+  };
+  'script/outline-generated': {
+    data: {
+      projectId: string;
+      outlineId: string;
+      sectionCount: number;
+    };
+  };
+  'script/section-completed': {
+    data: {
+      projectId: string;
+      outlineId: string;
+      sectionIndex: number;
+      sectionTitle: string;
+      sentenceCount: number;
+    };
+  };
+  'script/long-completed': {
+    data: {
+      projectId: string;
+      outlineId: string;
+      totalSections: number;
+      totalSentences: number;
+      totalDurationMinutes: number;
     };
   };
 

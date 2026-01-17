@@ -5,6 +5,7 @@ import { db } from './db/index.js';
 import { projectsRouter } from './api/projects.js';
 import { charactersRouter } from './api/characters.js';
 import { healthRouter } from './api/health.js';
+import { scriptsRouter } from './api/scripts.js';
 import { inngestHandler } from './api/inngest.js';
 import { inngest } from './inngest/index.js';
 
@@ -40,6 +41,8 @@ app.use('/api/v1/inngest', inngestHandler);
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/characters', charactersRouter);
+// Scripts routes are nested under projects for context
+app.use('/api/v1/projects', scriptsRouter);
 
 // Test endpoint to trigger Inngest events (development only)
 if (process.env.NODE_ENV !== 'production') {

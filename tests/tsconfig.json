@@ -4,19 +4,17 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
-    "outDir": "../../dist/backend",
-    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["./**/*.ts"],
+  "include": [
+    "./**/*.ts",
+    "../src/backend/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }

@@ -17,8 +17,16 @@ process.env.NODE_ENV = 'test';
 // Import resetDbConnection after setting environment variable
 import { resetDbConnection } from '../src/backend/db/index.js';
 
-// Schema for test database
+// Schema for test database - DROP and CREATE to ensure fresh schema
 const createTables = `
+DROP TABLE IF EXISTS generation_jobs;
+DROP TABLE IF EXISTS script_outlines;
+DROP TABLE IF EXISTS sentences;
+DROP TABLE IF EXISTS sections;
+DROP TABLE IF EXISTS project_cast;
+DROP TABLE IF EXISTS characters;
+DROP TABLE IF EXISTS projects;
+
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
@@ -79,21 +87,43 @@ CREATE TABLE IF NOT EXISTS sentences (
   FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS script_outlines (
+  id TEXT PRIMARY KEY NOT NULL,
+  project_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  total_target_minutes INTEGER NOT NULL,
+  visual_style TEXT DEFAULT 'cinematic' NOT NULL,
+  sections TEXT NOT NULL,
+  status TEXT DEFAULT 'draft' NOT NULL,
+  running_summary TEXT,
+  covered_topics TEXT DEFAULT '[]',
+  current_section_index INTEGER DEFAULT 0,
+  created_at INTEGER,
+  updated_at INTEGER,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS generation_jobs (
   id TEXT PRIMARY KEY NOT NULL,
   sentence_id TEXT,
   project_id TEXT,
+  outline_id TEXT,
   job_type TEXT NOT NULL,
   status TEXT DEFAULT 'queued' NOT NULL,
   progress INTEGER DEFAULT 0 NOT NULL,
   inngest_run_id TEXT,
   error_message TEXT,
   result_file TEXT,
+  total_steps INTEGER,
+  current_step INTEGER,
+  step_name TEXT,
   started_at INTEGER,
   completed_at INTEGER,
   created_at INTEGER,
   FOREIGN KEY (sentence_id) REFERENCES sentences(id) ON DELETE CASCADE,
-  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
 );
 `;
 
@@ -123,6 +153,7 @@ beforeEach(() => {
   db.exec('DELETE FROM generation_jobs');
   db.exec('DELETE FROM sentences');
   db.exec('DELETE FROM sections');
+  db.exec('DELETE FROM script_outlines');
   db.exec('DELETE FROM project_cast');
   db.exec('DELETE FROM characters');
   db.exec('DELETE FROM projects');
@@ -136,6 +167,7 @@ afterAll(() => {
     db.exec('DELETE FROM generation_jobs');
     db.exec('DELETE FROM sentences');
     db.exec('DELETE FROM sections');
+    db.exec('DELETE FROM script_outlines');
     db.exec('DELETE FROM project_cast');
     db.exec('DELETE FROM characters');
     db.exec('DELETE FROM projects');
@@ -144,3 +176,16 @@ afterAll(() => {
     // Ignore errors on cleanup
   }
 });
+
+// Export helper for tests that need to reset the database
+export async function resetTestDatabase() {
+  const db = new Database(testDbPath);
+  db.exec('DELETE FROM generation_jobs');
+  db.exec('DELETE FROM sentences');
+  db.exec('DELETE FROM sections');
+  db.exec('DELETE FROM script_outlines');
+  db.exec('DELETE FROM project_cast');
+  db.exec('DELETE FROM characters');
+  db.exec('DELETE FROM projects');
+  db.close();
+}

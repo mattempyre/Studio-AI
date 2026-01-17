@@ -633,3 +633,562 @@ describe('DeepseekError', () => {
     expect(error.details).toBeUndefined();
   });
 });
+
+// =============================================================================
+// STORY-006: Long-Form Script Generation Tests
+// =============================================================================
+
+describe('Long-Form Script Generation', () => {
+  let client: DeepseekClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetDeepseekClient();
+    process.env = { ...process.env, DEEPSEEK_API_KEY: 'test-api-key' };
+    client = new DeepseekClient({
+      apiKey: 'test-api-key',
+      maxRetries: 2,
+      retryDelay: 10,
+    });
+  });
+
+  describe('generateOutline', () => {
+    const validOutlineResponse = {
+      title: 'Journey to the Stars: A History of Space Exploration',
+      sections: [
+        {
+          index: 0,
+          title: 'The Dream of Flight',
+          description: 'Early visionaries and the birth of rocketry',
+          targetMinutes: 8,
+          keyPoints: ['Tsiolkovsky', 'Goddard', 'V-2 rockets'],
+        },
+        {
+          index: 1,
+          title: 'The Space Race Begins',
+          description: 'Cold War competition drives rapid advancement',
+          targetMinutes: 10,
+          keyPoints: ['Sputnik', 'Yuri Gagarin', 'Mercury program'],
+        },
+        {
+          index: 2,
+          title: 'One Giant Leap',
+          description: 'The Apollo program and lunar landing',
+          targetMinutes: 12,
+          keyPoints: ['Apollo 11', 'Moon landing', 'Armstrong'],
+        },
+      ],
+    };
+
+    it('should generate outline with correct section count for duration', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validOutlineResponse) } }],
+        }),
+      });
+
+      const outline = await client.generateOutline({
+        topic: 'The History of Space Exploration',
+        targetDurationMinutes: 30,
+      });
+
+      expect(outline.title).toBe('Journey to the Stars: A History of Space Exploration');
+      expect(outline.sections).toHaveLength(3);
+      expect(outline.totalTargetMinutes).toBe(30);
+    });
+
+    it('should include visual style in outline generation prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validOutlineResponse) } }],
+        }),
+      });
+
+      await client.generateOutline({
+        topic: 'Space',
+        targetDurationMinutes: 30,
+        visualStyle: 'cinematic documentary',
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const systemPrompt = callBody.messages[0].content;
+
+      expect(systemPrompt).toContain('cinematic documentary');
+    });
+
+    it('should allocate time proportionally across sections', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validOutlineResponse) } }],
+        }),
+      });
+
+      const outline = await client.generateOutline({
+        topic: 'Space',
+        targetDurationMinutes: 30,
+      });
+
+      const totalTime = outline.sections.reduce((sum, s) => sum + s.targetMinutes, 0);
+      expect(totalTime).toBe(30);
+    });
+
+    it('should handle 1-minute scripts (single section)', async () => {
+      const singleSectionResponse = {
+        title: 'Quick Intro',
+        sections: [
+          {
+            index: 0,
+            title: 'Introduction',
+            description: 'Brief overview',
+            targetMinutes: 1,
+            keyPoints: ['Point 1'],
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(singleSectionResponse) } }],
+        }),
+      });
+
+      const outline = await client.generateOutline({
+        topic: 'Quick Topic',
+        targetDurationMinutes: 1,
+      });
+
+      expect(outline.sections).toHaveLength(1);
+    });
+
+    it('should handle 180-minute scripts (20+ sections)', async () => {
+      const manySectionsResponse = {
+        title: 'Epic Documentary',
+        sections: Array(23).fill(null).map((_, i) => ({
+          index: i,
+          title: `Section ${i + 1}`,
+          description: `Description for section ${i + 1}`,
+          targetMinutes: Math.floor(180 / 23),
+          keyPoints: [`Point ${i + 1}`],
+        })),
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(manySectionsResponse) } }],
+        }),
+      });
+
+      const outline = await client.generateOutline({
+        topic: 'Long Documentary',
+        targetDurationMinutes: 180,
+      });
+
+      expect(outline.sections.length).toBeGreaterThanOrEqual(20);
+    });
+
+    it('should parse outline from markdown code block', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '```json\n' + JSON.stringify(validOutlineResponse) + '\n```',
+              },
+            },
+          ],
+        }),
+      });
+
+      const outline = await client.generateOutline({
+        topic: 'Space',
+        targetDurationMinutes: 30,
+      });
+
+      expect(outline.title).toBe('Journey to the Stars: A History of Space Exploration');
+    });
+
+    it('should throw PARSE_ERROR on invalid outline structure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ title: 'Test' }) } }],
+        }),
+      });
+
+      await expect(
+        client.generateOutline({ topic: 'Test', targetDurationMinutes: 30 })
+      ).rejects.toMatchObject({
+        code: 'PARSE_ERROR',
+      });
+    });
+  });
+
+  describe('generateSectionWithContext', () => {
+    const mockOutline = {
+      title: 'Test Video',
+      totalTargetMinutes: 30,
+      sections: [
+        { index: 0, title: 'Introduction', description: 'Opening', targetMinutes: 8, keyPoints: ['Hook'] },
+        { index: 1, title: 'Main Content', description: 'Body', targetMinutes: 14, keyPoints: ['Detail 1', 'Detail 2'] },
+        { index: 2, title: 'Conclusion', description: 'Wrap up', targetMinutes: 8, keyPoints: ['Summary'] },
+      ],
+    };
+
+    const validSectionResponse = {
+      sentences: [
+        {
+          text: 'Welcome to this exploration of our topic.',
+          imagePrompt: 'A stunning opening shot in cinematic style',
+          videoPrompt: 'slow zoom out',
+        },
+        {
+          text: 'Today we will discover fascinating insights.',
+          imagePrompt: 'Detailed visualization of the concept',
+          videoPrompt: 'pan right',
+        },
+      ],
+    };
+
+    it('should include running summary in prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validSectionResponse) } }],
+        }),
+      });
+
+      await client.generateSectionWithContext({
+        outline: mockOutline,
+        currentSectionIndex: 1,
+        runningSummary: 'We discussed the basics of the topic.',
+        previousSectionEnding: 'And that concludes our introduction.',
+        coveredTopics: ['basics', 'introduction'],
+        visualStyle: 'cinematic',
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const systemPrompt = callBody.messages[0].content;
+
+      expect(systemPrompt).toContain('We discussed the basics of the topic.');
+    });
+
+    it('should include previous section ending for continuity', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validSectionResponse) } }],
+        }),
+      });
+
+      await client.generateSectionWithContext({
+        outline: mockOutline,
+        currentSectionIndex: 1,
+        runningSummary: '',
+        previousSectionEnding: 'And that concludes our introduction.',
+        coveredTopics: [],
+        visualStyle: 'cinematic',
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const systemPrompt = callBody.messages[0].content;
+
+      expect(systemPrompt).toContain('And that concludes our introduction.');
+    });
+
+    it('should respect covered topics list', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validSectionResponse) } }],
+        }),
+      });
+
+      await client.generateSectionWithContext({
+        outline: mockOutline,
+        currentSectionIndex: 1,
+        runningSummary: '',
+        previousSectionEnding: '',
+        coveredTopics: ['topic A', 'topic B', 'topic C'],
+        visualStyle: 'cinematic',
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const systemPrompt = callBody.messages[0].content;
+
+      expect(systemPrompt).toContain('topic A');
+      expect(systemPrompt).toContain('topic B');
+      expect(systemPrompt).toContain('topic C');
+    });
+
+    it('should generate correct sentence count for target duration', async () => {
+      // 8 minutes * 150 words/min = 1200 words
+      // 1200 words / 15 words per sentence = 80 sentences
+      const longSectionResponse = {
+        sentences: Array(80).fill(null).map((_, i) => ({
+          text: `This is sentence number ${i + 1} with about fifteen words in it.`,
+          imagePrompt: `Image for sentence ${i + 1}`,
+          videoPrompt: 'static',
+        })),
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(longSectionResponse) } }],
+        }),
+      });
+
+      const result = await client.generateSectionWithContext({
+        outline: mockOutline,
+        currentSectionIndex: 0,
+        runningSummary: '',
+        previousSectionEnding: '',
+        coveredTopics: [],
+        visualStyle: 'cinematic',
+      });
+
+      expect(result.sentenceCount).toBe(80);
+    });
+
+    it('should throw error for invalid section index', async () => {
+      await expect(
+        client.generateSectionWithContext({
+          outline: mockOutline,
+          currentSectionIndex: 99,
+          runningSummary: '',
+          previousSectionEnding: '',
+          coveredTopics: [],
+          visualStyle: 'cinematic',
+        })
+      ).rejects.toMatchObject({
+        code: 'INVALID_RESPONSE',
+      });
+    });
+
+    it('should indicate first section in prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validSectionResponse) } }],
+        }),
+      });
+
+      await client.generateSectionWithContext({
+        outline: mockOutline,
+        currentSectionIndex: 0,
+        runningSummary: '',
+        previousSectionEnding: '',
+        coveredTopics: [],
+        visualStyle: 'cinematic',
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const userPrompt = callBody.messages[1].content;
+
+      expect(userPrompt).toContain('FIRST section');
+      expect(userPrompt).toContain('hook');
+    });
+
+    it('should indicate last section in prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validSectionResponse) } }],
+        }),
+      });
+
+      await client.generateSectionWithContext({
+        outline: mockOutline,
+        currentSectionIndex: 2, // Last section
+        runningSummary: '',
+        previousSectionEnding: '',
+        coveredTopics: [],
+        visualStyle: 'cinematic',
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const userPrompt = callBody.messages[1].content;
+
+      expect(userPrompt).toContain('FINAL section');
+      expect(userPrompt).toContain('conclusion');
+    });
+  });
+
+  describe('compressSummary', () => {
+    it('should keep summary under max word limit', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: 'The video covers space exploration history, starting with early pioneers.',
+              },
+            },
+          ],
+        }),
+      });
+
+      const mockSection = {
+        sectionIndex: 0,
+        title: 'Test Section',
+        sentences: [{ text: 'New content here.', imagePrompt: '', videoPrompt: '' }],
+        sentenceCount: 1,
+        wordCount: 3,
+        durationMinutes: 0.1,
+      };
+
+      const summary = await client.compressSummary('Previous summary', mockSection, 300);
+
+      expect(summary.split(/\s+/).length).toBeLessThanOrEqual(300);
+    });
+
+    it('should preserve key facts and entities', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: 'The video discusses Neil Armstrong and the 1969 Apollo 11 mission.',
+              },
+            },
+          ],
+        }),
+      });
+
+      const mockSection = {
+        sectionIndex: 0,
+        title: 'Moon Landing',
+        sentences: [
+          { text: 'Neil Armstrong was the first person to walk on the moon in 1969.', imagePrompt: '', videoPrompt: '' },
+        ],
+        sentenceCount: 1,
+        wordCount: 12,
+        durationMinutes: 0.1,
+      };
+
+      const summary = await client.compressSummary('', mockSection, 300);
+
+      expect(summary).toContain('Armstrong');
+      expect(summary).toContain('1969');
+    });
+
+    it('should combine previous summary with new content', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: 'Combined: Early rockets led to space race. New content added.',
+              },
+            },
+          ],
+        }),
+      });
+
+      const mockSection = {
+        sectionIndex: 1,
+        title: 'New Section',
+        sentences: [{ text: 'New information here.', imagePrompt: '', videoPrompt: '' }],
+        sentenceCount: 1,
+        wordCount: 3,
+        durationMinutes: 0.1,
+      };
+
+      const summary = await client.compressSummary('Early rockets led to the space race.', mockSection, 300);
+
+      expect(summary.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('extractCoveredTopics', () => {
+    it('should extract key topics as JSON array', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '["early rocketry", "Goddard experiments", "V-2 development"]',
+              },
+            },
+          ],
+        }),
+      });
+
+      const mockSection = {
+        sectionIndex: 0,
+        title: 'Test',
+        sentences: [{ text: 'Content about rockets.', imagePrompt: '', videoPrompt: '' }],
+        sentenceCount: 1,
+        wordCount: 3,
+        durationMinutes: 0.1,
+      };
+
+      const topics = await client.extractCoveredTopics(mockSection);
+
+      expect(topics).toContain('early rocketry');
+      expect(topics).toContain('Goddard experiments');
+      expect(topics).toContain('V-2 development');
+    });
+
+    it('should handle non-JSON response gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: 'The topics covered are "space exploration", "astronauts", and "missions".',
+              },
+            },
+          ],
+        }),
+      });
+
+      const mockSection = {
+        sectionIndex: 0,
+        title: 'Test',
+        sentences: [{ text: 'Content.', imagePrompt: '', videoPrompt: '' }],
+        sentenceCount: 1,
+        wordCount: 1,
+        durationMinutes: 0.1,
+      };
+
+      const topics = await client.extractCoveredTopics(mockSection);
+
+      // Should extract quoted strings
+      expect(topics.length).toBeGreaterThan(0);
+    });
+
+    it('should return empty array on complete failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'No topics found' } }],
+        }),
+      });
+
+      const mockSection = {
+        sectionIndex: 0,
+        title: 'Test',
+        sentences: [],
+        sentenceCount: 0,
+        wordCount: 0,
+        durationMinutes: 0,
+      };
+
+      const topics = await client.extractCoveredTopics(mockSection);
+
+      expect(Array.isArray(topics)).toBe(true);
+    });
+  });
+});

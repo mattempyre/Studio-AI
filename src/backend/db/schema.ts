@@ -73,17 +73,49 @@ export const sentences = sqliteTable('sentences', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// Script outlines table - stores outline structure for long-form scripts
+export const scriptOutlines = sqliteTable('script_outlines', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  topic: text('topic').notNull(), // Original topic for generation
+  totalTargetMinutes: integer('total_target_minutes').notNull(),
+  visualStyle: text('visual_style').notNull().default('cinematic'),
+  sections: text('sections', { mode: 'json' }).$type<SectionOutline[]>().notNull(),
+  status: text('status').notNull().default('draft'), // 'draft', 'approved', 'generating', 'completed', 'failed'
+  runningSummary: text('running_summary'), // Updated as sections generate
+  coveredTopics: text('covered_topics', { mode: 'json' }).$type<string[]>().default([]),
+  currentSectionIndex: integer('current_section_index').default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Section outline interface for JSON column
+export interface SectionOutline {
+  index: number;
+  title: string;
+  description: string;
+  targetMinutes: number;
+  keyPoints: string[];
+  status: 'pending' | 'generating' | 'completed' | 'failed';
+}
+
 // Generation jobs table - tracks background job status
 export const generationJobs = sqliteTable('generation_jobs', {
   id: text('id').primaryKey(),
   sentenceId: text('sentence_id').references(() => sentences.id, { onDelete: 'cascade' }),
   projectId: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-  jobType: text('job_type').notNull(), // 'script', 'audio', 'image', 'video', 'export'
+  outlineId: text('outline_id').references(() => scriptOutlines.id, { onDelete: 'cascade' }),
+  jobType: text('job_type').notNull(), // 'script', 'script-long', 'audio', 'image', 'video', 'export'
   status: text('status').notNull().default('queued'), // 'queued', 'running', 'completed', 'failed'
   progress: integer('progress').notNull().default(0), // 0-100
   inngestRunId: text('inngest_run_id'),
   errorMessage: text('error_message'),
   resultFile: text('result_file'), // Path to generated file
+  // Step tracking for long-form generation
+  totalSteps: integer('total_steps'), // Total sections to generate
+  currentStep: integer('current_step'), // Current section being generated
+  stepName: text('step_name'), // "Generating section: Introduction"
   startedAt: integer('started_at', { mode: 'timestamp' }),
   completedAt: integer('completed_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
@@ -104,3 +136,6 @@ export type NewSentence = typeof sentences.$inferInsert;
 
 export type GenerationJob = typeof generationJobs.$inferSelect;
 export type NewGenerationJob = typeof generationJobs.$inferInsert;
+
+export type ScriptOutline = typeof scriptOutlines.$inferSelect;
+export type NewScriptOutline = typeof scriptOutlines.$inferInsert;

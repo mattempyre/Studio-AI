@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
-import type { Express } from 'express';
+import type { Express, Request, Response, NextFunction } from 'express';
 import '../setup.js';
 
 // Create a test app with Inngest endpoint
@@ -20,7 +20,7 @@ async function createTestAppWithInngest(): Promise<Express> {
   app.use('/api/v1/health', healthRouter);
 
   // Error handling
-  app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
     res.status(500).json({
       success: false,
       error: {

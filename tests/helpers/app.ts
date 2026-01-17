@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 
+// Re-export resetTestDatabase from setup for convenience
+export { resetTestDatabase } from '../setup.js';
+
 // Create a test instance of the Express app
 // Note: This must be called AFTER the test setup has set DATABASE_PATH
 export async function createTestApp() {
@@ -8,6 +11,7 @@ export async function createTestApp() {
   const { projectsRouter } = await import('../../src/backend/api/projects.js');
   const { charactersRouter } = await import('../../src/backend/api/characters.js');
   const { healthRouter } = await import('../../src/backend/api/health.js');
+  const { scriptsRouter } = await import('../../src/backend/api/scripts.js');
 
   const app = express();
 
@@ -17,6 +21,8 @@ export async function createTestApp() {
   app.use('/api/v1/health', healthRouter);
   app.use('/api/v1/projects', projectsRouter);
   app.use('/api/v1/characters', charactersRouter);
+  // Scripts routes are nested under projects for context
+  app.use('/api/v1/projects', scriptsRouter);
 
   // Error handling middleware
   app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

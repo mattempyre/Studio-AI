@@ -39,6 +39,46 @@ export interface GeneratedSentence {
 export interface GeneratedSection {
   title: string;
   sentences: GeneratedSentence[];
+  durationMinutes?: number;
+}
+
+// Long-form script generation types
+export interface OutlineGenerationOptions {
+  topic: string;
+  targetDurationMinutes: number;
+  visualStyle?: string;
+}
+
+export interface ScriptOutlineSection {
+  index: number;
+  title: string;
+  description: string;
+  targetMinutes: number;
+  keyPoints: string[];
+}
+
+export interface ScriptOutlineResult {
+  title: string;
+  totalTargetMinutes: number;
+  sections: ScriptOutlineSection[];
+}
+
+export interface SectionGenerationContext {
+  outline: ScriptOutlineResult;
+  currentSectionIndex: number;
+  runningSummary: string;
+  previousSectionEnding: string;
+  coveredTopics: string[];
+  visualStyle: string;
+}
+
+export interface GeneratedSectionResult {
+  sectionIndex: number;
+  title: string;
+  sentences: GeneratedSentence[];
+  sentenceCount: number;
+  wordCount: number;
+  durationMinutes: number;
 }
 
 export interface GeneratedScript {
@@ -179,6 +219,330 @@ export class DeepseekClient {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  // ===========================================================================
+  // Long-Form Script Generation Methods
+  // ===========================================================================
+
+  /**
+   * Generate an outline for a long-form script.
+   * Creates a structured plan with sections, descriptions, and time allocations.
+   */
+  async generateOutline(options: OutlineGenerationOptions): Promise<ScriptOutlineResult> {
+    const sectionCount = Math.max(1, Math.ceil(options.targetDurationMinutes / 8));
+
+    const systemPrompt = `You are a professional video script planner. Create a detailed outline for a ${options.targetDurationMinutes} minute video about "${options.topic}".
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+  "title": "Engaging Video Title",
+  "sections": [
+    {
+      "index": 0,
+      "title": "Section Title",
+      "description": "2-3 sentence description of what this section covers",
+      "targetMinutes": 8,
+      "keyPoints": ["Point 1", "Point 2", "Point 3"]
+    }
+  ]
+}
+
+GUIDELINES:
+- Create approximately ${sectionCount} sections (roughly 1 section per 8 minutes)
+- Each section should have a clear focus and natural flow to the next
+- Distribute time based on topic importance
+- First section should hook the viewer
+- Last section should provide a satisfying conclusion
+- Key points should be specific and actionable for the script writer
+- Total section minutes should equal ${options.targetDurationMinutes}${options.visualStyle ? `\n- Keep the visual style "${options.visualStyle}" in mind when planning` : ''}
+
+Output ONLY valid JSON. No markdown, no explanation.`;
+
+    const response = await this.chat([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Create an outline for a ${options.targetDurationMinutes} minute video about: "${options.topic}"` },
+    ]);
+
+    return this.parseOutlineResponse(response, options.targetDurationMinutes);
+  }
+
+  /**
+   * Generate a single section with full context from previous sections.
+   * Uses running summary and covered topics to prevent repetition.
+   */
+  async generateSectionWithContext(context: SectionGenerationContext): Promise<GeneratedSectionResult> {
+    const section = context.outline.sections[context.currentSectionIndex];
+    if (!section) {
+      throw new DeepseekError(
+        `Section index ${context.currentSectionIndex} not found in outline`,
+        'INVALID_RESPONSE'
+      );
+    }
+
+    const wordsNeeded = section.targetMinutes * 150;
+    const sentencesNeeded = Math.ceil(wordsNeeded / 15);
+
+    const systemPrompt = this.buildSectionSystemPrompt(context, section, sentencesNeeded);
+    const userPrompt = this.buildSectionUserPrompt(context, section);
+
+    const response = await this.chat([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ]);
+
+    return this.parseSectionResponse(response, section);
+  }
+
+  /**
+   * Compress content into a running summary for context management.
+   * Keeps the summary under maxWords while preserving key facts.
+   */
+  async compressSummary(
+    previousSummary: string,
+    newSection: GeneratedSectionResult,
+    maxWords: number = 300
+  ): Promise<string> {
+    const newContent = newSection.sentences.map(s => s.text).join(' ');
+
+    const prompt = `You are a summarizer. Combine the existing summary with new content into a concise summary.
+
+EXISTING SUMMARY:
+${previousSummary || '(No previous summary - this is the first section)'}
+
+NEW CONTENT (Section "${newSection.title}"):
+${newContent}
+
+Create a summary that:
+1. Preserves key facts, names, dates, and relationships
+2. Captures the main narrative thread
+3. Is under ${maxWords} words
+4. Maintains chronological flow
+
+Output ONLY the summary text, no headers or formatting.`;
+
+    const response = await this.chat([
+      { role: 'user', content: prompt },
+    ]);
+
+    return response.trim();
+  }
+
+  /**
+   * Extract key topics covered in a section for anti-repetition tracking.
+   */
+  async extractCoveredTopics(section: GeneratedSectionResult): Promise<string[]> {
+    const content = section.sentences.map(s => s.text).join(' ');
+
+    const prompt = `Extract the key topics, concepts, and facts covered in this text. Output as a JSON array of short phrases (3-5 words each).
+
+TEXT:
+${content}
+
+Output ONLY a JSON array like: ["topic one", "topic two", "topic three"]`;
+
+    const response = await this.chat([
+      { role: 'user', content: prompt },
+    ]);
+
+    try {
+      const parsed = JSON.parse(response.trim());
+      if (Array.isArray(parsed)) {
+        return parsed.filter((t): t is string => typeof t === 'string');
+      }
+    } catch {
+      // If parsing fails, extract simple phrases
+      const topics = response.match(/"([^"]+)"/g);
+      if (topics) {
+        return topics.map(t => t.replace(/"/g, ''));
+      }
+    }
+
+    return [];
+  }
+
+  // ===========================================================================
+  // Private Helper Methods for Long-Form Generation
+  // ===========================================================================
+
+  private buildSectionSystemPrompt(
+    context: SectionGenerationContext,
+    section: ScriptOutlineSection,
+    sentencesNeeded: number
+  ): string {
+    return `You are a professional video script writer continuing a ${context.outline.totalTargetMinutes} minute video titled "${context.outline.title}".
+
+FULL OUTLINE:
+${JSON.stringify(context.outline.sections.map(s => ({ index: s.index, title: s.title, targetMinutes: s.targetMinutes })), null, 2)}
+
+CURRENT SECTION TO WRITE:
+Section ${section.index}: "${section.title}"
+Description: ${section.description}
+Target: ${section.targetMinutes} minutes (~${section.targetMinutes * 150} words, ~${sentencesNeeded} sentences)
+Key points to cover: ${section.keyPoints.join(', ')}
+
+${context.runningSummary ? `STORY SO FAR (summary):\n${context.runningSummary}\n` : ''}
+${context.previousSectionEnding ? `PREVIOUS SECTION ENDED WITH:\n"${context.previousSectionEnding}"\n` : ''}
+${context.coveredTopics.length > 0 ? `ALREADY COVERED (do not re-explain these):\n- ${context.coveredTopics.join('\n- ')}\n` : ''}
+
+VISUAL STYLE: ${context.visualStyle}
+
+OUTPUT FORMAT (JSON only):
+{
+  "sentences": [
+    {
+      "text": "The narration text for this sentence.",
+      "imagePrompt": "A detailed image prompt in ${context.visualStyle} style.",
+      "videoPrompt": "Brief motion description (pan, zoom, etc.)"
+    }
+  ]
+}
+
+GUIDELINES:
+- Continue the narrative naturally from where the previous section left off
+- Each sentence should be 10-20 words for clear narration
+- Do NOT repeat information already covered
+- Cover ALL key points for this section
+- End with a smooth transition to the next section (unless this is the last section)
+- Image prompts should match the ${context.visualStyle} visual style
+- Output ONLY valid JSON, no markdown or explanation`;
+  }
+
+  private buildSectionUserPrompt(
+    context: SectionGenerationContext,
+    section: ScriptOutlineSection
+  ): string {
+    const isFirst = context.currentSectionIndex === 0;
+    const isLast = context.currentSectionIndex === context.outline.sections.length - 1;
+
+    let prompt = `Write section ${section.index}: "${section.title}"`;
+
+    if (isFirst) {
+      prompt += '\n\nThis is the FIRST section - start with a compelling hook to engage viewers.';
+    } else if (isLast) {
+      prompt += '\n\nThis is the FINAL section - provide a satisfying conclusion and summary.';
+    }
+
+    return prompt;
+  }
+
+  private parseOutlineResponse(content: string, targetMinutes: number): ScriptOutlineResult {
+    let jsonContent = content.trim();
+
+    // Handle markdown code blocks
+    const jsonMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+
+    // Try to find JSON object
+    const objectMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      jsonContent = objectMatch[0];
+    }
+
+    try {
+      const parsed = JSON.parse(jsonContent);
+
+      if (!parsed.title || !Array.isArray(parsed.sections)) {
+        throw new DeepseekError(
+          'Invalid outline structure: missing title or sections',
+          'PARSE_ERROR',
+          { parsed }
+        );
+      }
+
+      const sections: ScriptOutlineSection[] = parsed.sections.map(
+        (section: Record<string, unknown>, index: number) => ({
+          index,
+          title: String(section.title || `Section ${index + 1}`),
+          description: String(section.description || ''),
+          targetMinutes: Number(section.targetMinutes) || Math.ceil(targetMinutes / parsed.sections.length),
+          keyPoints: Array.isArray(section.keyPoints)
+            ? section.keyPoints.map(String)
+            : [],
+        })
+      );
+
+      return {
+        title: parsed.title,
+        totalTargetMinutes: targetMinutes,
+        sections,
+      };
+    } catch (error) {
+      if (error instanceof DeepseekError) {
+        throw error;
+      }
+
+      throw new DeepseekError(
+        `Failed to parse outline response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'PARSE_ERROR',
+        { content: content.substring(0, 500) }
+      );
+    }
+  }
+
+  private parseSectionResponse(
+    content: string,
+    section: ScriptOutlineSection
+  ): GeneratedSectionResult {
+    let jsonContent = content.trim();
+
+    // Handle markdown code blocks
+    const jsonMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+
+    // Try to find JSON object
+    const objectMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      jsonContent = objectMatch[0];
+    }
+
+    try {
+      const parsed = JSON.parse(jsonContent);
+
+      if (!Array.isArray(parsed.sentences)) {
+        throw new DeepseekError(
+          'Invalid section response: missing sentences array',
+          'PARSE_ERROR',
+          { parsed }
+        );
+      }
+
+      const sentences: GeneratedSentence[] = parsed.sentences.map(
+        (sentence: Record<string, unknown>) => ({
+          text: String(sentence.text || ''),
+          imagePrompt: sentence.imagePrompt ? String(sentence.imagePrompt) : undefined,
+          videoPrompt: sentence.videoPrompt ? String(sentence.videoPrompt) : undefined,
+        })
+      );
+
+      const wordCount = sentences.reduce(
+        (sum, s) => sum + s.text.split(/\s+/).length,
+        0
+      );
+
+      return {
+        sectionIndex: section.index,
+        title: section.title,
+        sentences,
+        sentenceCount: sentences.length,
+        wordCount,
+        durationMinutes: Math.round((wordCount / 150) * 10) / 10,
+      };
+    } catch (error) {
+      if (error instanceof DeepseekError) {
+        throw error;
+      }
+
+      throw new DeepseekError(
+        `Failed to parse section response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'PARSE_ERROR',
+        { content: content.substring(0, 500) }
+      );
     }
   }
 

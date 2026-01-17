@@ -2,7 +2,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db, generationJobs, type GenerationJob, type NewGenerationJob } from '../db/index.js';
 import { nanoid } from 'nanoid';
 
-export type JobType = 'script' | 'audio' | 'image' | 'video' | 'export';
+export type JobType = 'script' | 'script-long' | 'audio' | 'image' | 'video' | 'export';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
 
 interface CreateJobParams {
@@ -18,6 +18,11 @@ interface UpdateJobParams {
   errorMessage?: string;
   resultFile?: string;
   inngestRunId?: string;
+  // Step tracking for long-form generation
+  outlineId?: string;
+  totalSteps?: number;
+  currentStep?: number;
+  stepName?: string;
 }
 
 /**
