@@ -7,6 +7,8 @@ import { projectsRouter } from './api/projects.js';
 import { charactersRouter } from './api/characters.js';
 import { healthRouter } from './api/health.js';
 import { scriptsRouter } from './api/scripts.js';
+import { sectionsRouter } from './api/sections.js';
+import { sentencesRouter } from './api/sentences.js';
 import { inngestHandler } from './api/inngest.js';
 import { inngest } from './inngest/index.js';
 import { setupWebSocket, closeWebSocket, getTotalClients } from './websocket/index.js';
@@ -43,6 +45,8 @@ app.use('/api/v1/inngest', inngestHandler);
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/characters', charactersRouter);
+app.use('/api/v1/sections', sectionsRouter);
+app.use('/api/v1/sentences', sentencesRouter);
 // Scripts routes are nested under projects for context
 app.use('/api/v1/projects', scriptsRouter);
 
