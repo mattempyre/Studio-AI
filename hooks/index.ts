@@ -13,3 +13,5 @@ export {
   type ConnectionStatus,
   type JobType,
 } from './useWebSocket.js';
+
+export { useCharacters } from './useCharacters.js';

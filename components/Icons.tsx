@@ -37,7 +37,8 @@ import {
   Mic,
   UploadCloud,
   Edit3,
-  Globe
+  Globe,
+  AlertCircle
 } from 'lucide-react';
 
 export {
@@ -78,5 +79,6 @@ export {
   Mic,
   UploadCloud,
   Edit3,
-  Globe
+  Globe,
+  AlertCircle
 };

@@ -126,6 +126,7 @@ const Layout: React.FC<LayoutProps> = ({
           <nav className="flex flex-col gap-2 flex-grow">
             {[
               { id: 'dashboard', icon: Icons.LayoutDashboard, label: 'Dashboard' },
+              { id: 'characters', icon: Icons.User, label: 'Characters' },
               { id: 'script', icon: Icons.Type, label: 'Script & Audio' },
               { id: 'storyboard', icon: Icons.Grid, label: 'Storyboard' },
               { id: 'video', icon: Icons.Film, label: 'Video Editor' },

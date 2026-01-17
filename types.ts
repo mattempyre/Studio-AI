@@ -1,5 +1,5 @@
 
-export type ViewState = 'dashboard' | 'script' | 'voiceover' | 'storyboard' | 'video';
+export type ViewState = 'dashboard' | 'script' | 'voiceover' | 'storyboard' | 'video' | 'characters';
 
 export interface User {
   id: string;
@@ -76,12 +76,34 @@ export interface Source {
   uri: string;
 }
 
+// Frontend Character type (used in project cast, UI display)
 export interface Character {
   id: string;
   name: string;
   description: string;
   imageUrl: string;
   stylePrompt?: string; // The specific AI prompt used to generate this character
+}
+
+// Backend Character type (from API, aligned with DB schema)
+export interface BackendCharacter {
+  id: string;
+  name: string;
+  description: string | null;
+  referenceImages: string[];
+  styleLora: string | null;
+  createdAt: string | null;
+}
+
+// API response types for characters
+export interface CharacterApiResponse {
+  success: boolean;
+  data: BackendCharacter;
+}
+
+export interface CharactersListApiResponse {
+  success: boolean;
+  data: BackendCharacter[];
 }
 
 export interface Scene {
