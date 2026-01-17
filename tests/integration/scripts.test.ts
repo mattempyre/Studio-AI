@@ -579,3 +579,231 @@ describe('Long-Form Generation Flow', () => {
     expect(response.body.data.estimatedDurationSeconds).toBeGreaterThan(0);
   });
 });
+
+// =============================================================================
+// STORY-009: Short-Form Script Generation Tests
+// =============================================================================
+
+describe('Short-Form Script Generation (STORY-009)', () => {
+  let app: Express;
+  let testProjectId: string;
+
+  beforeAll(async () => {
+    app = await createTestApp();
+  });
+
+  beforeEach(async () => {
+    await db.delete(generationJobs);
+    await db.delete(sentences);
+    await db.delete(sections);
+    await db.delete(scriptOutlines);
+    await db.delete(projects);
+
+    testProjectId = nanoid();
+    await db.insert(projects).values({
+      id: testProjectId,
+      name: 'Short-Form Test Project',
+      topic: 'Test Topic',
+      targetDuration: 5,
+      visualStyle: 'cinematic',
+      status: 'draft',
+    });
+  });
+
+  describe('POST /api/v1/projects/:projectId/generate-script-short', () => {
+    it('should queue short-form script generation', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Quick Introduction to AI',
+          targetDuration: 3,
+          useSearchGrounding: false,
+        });
+
+      expect(response.status).toBe(202);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.jobId).toBeDefined();
+      expect(response.body.data.status).toBe('queued');
+      expect(response.body.data.message).toBe('Script generation started');
+    });
+
+    it('should create job record with "script" type', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Short Video Topic',
+          targetDuration: 5,
+        });
+
+      const jobId = response.body.data.jobId;
+      const job = await db.select()
+        .from(generationJobs)
+        .where(eq(generationJobs.id, jobId))
+        .get();
+
+      expect(job).toBeDefined();
+      expect(job?.jobType).toBe('script');
+      expect(job?.projectId).toBe(testProjectId);
+    });
+
+    it('should accept useSearchGrounding option', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Latest AI Developments',
+          targetDuration: 5,
+          useSearchGrounding: true,
+        });
+
+      expect(response.status).toBe(202);
+      expect(response.body.success).toBe(true);
+    });
+
+    it('should default useSearchGrounding to false', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Simple Topic',
+          targetDuration: 2,
+        });
+
+      expect(response.status).toBe(202);
+      expect(response.body.success).toBe(true);
+    });
+
+    it('should return 404 for non-existent project', async () => {
+      const response = await request(app)
+        .post('/api/v1/projects/non-existent-id/generate-script-short')
+        .send({
+          topic: 'Test Topic',
+          targetDuration: 5,
+        });
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('should return 400 for missing topic', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          targetDuration: 5,
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('should return 400 for missing duration', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Test Topic',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should return 400 for duration exceeding 10 minutes', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Long Topic',
+          targetDuration: 15, // Exceeds 10 minute limit
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error.message).toContain('10 minutes');
+    });
+
+    it('should return 400 for duration less than 1 minute', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Too Short',
+          targetDuration: 0.5, // Less than 1 minute
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should return 400 for empty topic', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: '',
+          targetDuration: 5,
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should return 400 for topic exceeding 1000 characters', async () => {
+      const longTopic = 'A'.repeat(1001);
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: longTopic,
+          targetDuration: 5,
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should provide estimated duration in response', async () => {
+      const response = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Quick Topic',
+          targetDuration: 5,
+        });
+
+      expect(response.body.data.estimatedDurationSeconds).toBeDefined();
+      expect(response.body.data.estimatedDurationSeconds).toBe(10);
+    });
+  });
+
+  describe('Short-Form vs Long-Form Comparison', () => {
+    it('should use "script" job type for short-form', async () => {
+      const shortResponse = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script-short`)
+        .send({
+          topic: 'Short Topic',
+          targetDuration: 5,
+        });
+
+      const shortJobId = shortResponse.body.data.jobId;
+      const shortJob = await db.select()
+        .from(generationJobs)
+        .where(eq(generationJobs.id, shortJobId))
+        .get();
+
+      expect(shortJob?.jobType).toBe('script');
+    });
+
+    it('should use "script-long" job type for long-form', async () => {
+      const longResponse = await request(app)
+        .post(`/api/v1/projects/${testProjectId}/generate-script`)
+        .send({
+          mode: 'auto',
+          topic: 'Long Topic',
+          targetDurationMinutes: 30,
+        });
+
+      const longJobId = longResponse.body.data.jobId;
+      const longJob = await db.select()
+        .from(generationJobs)
+        .where(eq(generationJobs.id, longJobId))
+        .get();
+
+      expect(longJob?.jobType).toBe('script-long');
+    });
+  });
+});

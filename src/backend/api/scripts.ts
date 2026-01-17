@@ -38,6 +38,13 @@ const generateScriptSchema = z.object({
   visualStyle: z.string().optional().default('cinematic'),
 });
 
+// Short-form script generation schema (STORY-009)
+const generateShortScriptSchema = z.object({
+  topic: z.string().min(1, 'Topic is required').max(1000, 'Topic must be under 1000 characters'),
+  targetDuration: z.number().min(1, 'Duration must be at least 1 minute').max(10, 'Use long-form generation for videos over 10 minutes'),
+  useSearchGrounding: z.boolean().optional().default(false),
+});
+
 const regenerateSectionSchema = z.object({
   sectionIndex: z.number().min(0),
 });
@@ -135,12 +142,83 @@ scriptsRouter.post('/:projectId/generate-outline', async (req: Request, res: Res
 });
 
 // =============================================================================
-// Generate Full Script
+// Generate Short-Form Script (STORY-009)
+// =============================================================================
+
+/**
+ * POST /api/v1/projects/:projectId/generate-script-short
+ * Triggers short-form script generation (<10 minutes).
+ * Uses a single Deepseek API call for efficiency.
+ */
+scriptsRouter.post('/:projectId/generate-script-short', async (req: Request, res: Response, next) => {
+  try {
+    const projectId = req.params.projectId as string;
+
+    // Validate request body
+    const parsed = generateShortScriptSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => e.message).join(', '),
+        },
+      });
+    }
+
+    const { topic, targetDuration, useSearchGrounding } = parsed.data;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, projectId)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Create job record
+    const job = await jobService.create({
+      projectId,
+      jobType: 'script',
+    });
+
+    // Trigger short-form Inngest function
+    await inngest.send({
+      name: 'script/generate',
+      data: {
+        projectId,
+        topic,
+        targetDuration,
+        useSearch: useSearchGrounding,
+      },
+    });
+
+    // Estimate generation time (~10 seconds for short scripts)
+    const estimatedDurationSeconds = 10;
+
+    res.status(202).json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: 'queued',
+        message: 'Script generation started',
+        estimatedDurationSeconds,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
+// Generate Full Script (Long-Form)
 // =============================================================================
 
 /**
  * POST /api/v1/projects/:projectId/generate-script
  * Triggers full script generation (auto mode or from existing outline).
+ * For short scripts (<10 min), use /generate-script-short instead.
  */
 scriptsRouter.post('/:projectId/generate-script', async (req: Request, res: Response, next) => {
   try {

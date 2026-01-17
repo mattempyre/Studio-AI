@@ -3,9 +3,9 @@
 
 export { helloFunction } from './hello.js';
 export { generateLongScriptFunction, generateOutlineOnlyFunction } from './generateLongScript.js';
+export { generateScriptFunction } from './generateScript.js';
 
 // Future functions to be added:
-// export { generateScript } from './script.js';
 // export { generateAudio } from './audio.js';
 // export { generateImage } from './image.js';
 // export { generateVideo } from './video.js';
