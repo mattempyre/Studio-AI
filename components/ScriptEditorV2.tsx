@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import * as Icons from './Icons';
-import type { BackendProject, BackendSection, BackendSentence, Character, Voice } from '../types';
+import type { BackendProject, BackendSection, BackendSentence, Character, Voice, BackendCharacter } from '../types';
 import { projectsApi, sectionsApi, sentencesApi, scriptsApi, type GeneratedSentence, type AIExpandResult } from '../services/backendApi';
 import { AIExpansionModal } from './AIExpansionModal';
 import { AIPreviewModal } from './AIPreviewModal';
+import { useCharacters } from '../hooks/useCharacters';
+import { CharacterFormData } from './CharacterLibrary/CharacterModal';
 
 // Import extracted components and utils
 import {
@@ -86,12 +88,21 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   const [isDraggingVoice, setIsDraggingVoice] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Character Form (Inline)
+  // Character management with useCharacters hook
+  const {
+    characters: backendCharacters,
+    createCharacter,
+    updateCharacter,
+    deleteCharacter,
+    uploadImage,
+    deleteImage,
+    refetch: refetchCharacters,
+  } = useCharacters();
+
+  // Character modal state
   const [isCreatingChar, setIsCreatingChar] = useState(false);
-  const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null);
-  const [newCharName, setNewCharName] = useState('');
-  const [newCharDesc, setNewCharDesc] = useState('');
-  const [formImageUrl, setFormImageUrl] = useState('');
+  const [editingCharacter, setEditingCharacter] = useState<BackendCharacter | null>(null);
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -119,12 +130,27 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
       }
 
       // Normalize the data to ensure arrays are always defined
+      // Map cast (from API with referenceImages) to characters (frontend format with imageUrl)
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const castData = (data as any).cast || [];
+      const mappedCharacters = castData.map((c: any) => {
+        const firstImage = c.referenceImages?.[0];
+        return {
+          id: c.id,
+          name: c.name,
+          description: c.description || '',
+          imageUrl: firstImage ? `${API_BASE}${firstImage}` : `https://picsum.photos/seed/${c.id}/200/200`,
+          stylePrompt: c.styleLora || undefined,
+        };
+      });
+
       const normalizedProject: BackendProject = {
         ...data,
         sections: (data.sections || []).map(section => ({
           ...section,
           sentences: section.sentences || [],
         })),
+        characters: mappedCharacters,
       };
 
       setProject(normalizedProject);
@@ -597,8 +623,10 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
         await projectsApi.removeCast(project.id, character.id);
         setProject({ ...project, characters: (project.characters || []).filter(c => c.id !== character.id) });
       } else {
-        const updatedCast = await projectsApi.addCast(project.id, character.id);
-        setProject({ ...project, characters: updatedCast });
+        await projectsApi.addCast(project.id, character.id);
+        // Use the character passed in (already in correct format with imageUrl)
+        // instead of relying on API response format
+        setProject({ ...project, characters: [...(project.characters || []), character] });
       }
     } catch (e) {
       console.error(e);
@@ -606,74 +634,124 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     } finally { setIsSaving(false); }
   };
 
-  const resetCharacterForm = () => {
-    setNewCharName('');
-    setNewCharDesc('');
-    setFormImageUrl('');
-    setEditingCharacterId(null);
-    setIsCreatingChar(false);
-  };
+  // Character creation handler
+  const handleCreateCharacter = useCallback(async (data: CharacterFormData) => {
+    const result = await createCharacter({
+      name: data.name,
+      description: data.description || undefined,
+      styleLora: data.styleLora || undefined,
+    });
 
-  const handleSaveCharacter = () => {
-    // Stub for creating character since prop is missing
-    setToast({ message: 'Character creation not supported in V2 yet', type: 'error' });
-    resetCharacterForm();
-  };
+    if (result) {
+      // Upload any pending images
+      if (pendingImages.length > 0) {
+        for (const file of pendingImages) {
+          await uploadImage(result.id, file);
+        }
+        await refetchCharacters();
+      }
 
-  const renderForm = (isEdit: boolean) => (
-    <div
-      className={`bg-[#1e1933] rounded-xl border p-5 space-y-4 cursor-default animate-in fade-in zoom-in-95 duration-200 shadow-2xl relative overflow-hidden ${isEdit ? 'border-primary' : 'border-dashed border-white/20'}`}
-      onClick={e => e.stopPropagation()}
-    >
-      <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-black/20 to-transparent pointer-events-none" />
-      <div className="flex items-center justify-between relative z-10">
-        <h4 className="text-xs font-bold text-primary uppercase tracking-widest">{isEdit ? 'Edit Character' : 'New Character'}</h4>
-        <button onClick={resetCharacterForm} className="text-text-muted hover:text-white p-1 hover:bg-white/10 rounded-full transition-colors"><Icons.X size={14} /></button>
-      </div>
-      <div className="flex flex-col gap-4 relative z-10">
-        <div className="flex items-start gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="size-20 shrink-0 bg-black rounded-lg border border-white/20 overflow-hidden relative shadow-inner">
-              {formImageUrl ? (
-                <img src={formImageUrl} className="w-full h-full object-cover" alt="Preview" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-white/5"><Icons.User className="text-text-muted opacity-50" size={24} /></div>
-              )}
-            </div>
-          </div>
-          <div className="flex-1">
-            <label className="text-[9px] font-bold text-text-muted uppercase mb-1 block">Character Name</label>
-            <input
-              className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-primary focus:outline-none placeholder:text-text-muted/30 focus:bg-black/60 transition-colors"
-              value={newCharName}
-              onChange={(e) => setNewCharName(e.target.value)}
-              autoFocus
-            />
-            <button
-              onClick={(e) => { e.stopPropagation(); setFormImageUrl(`https://picsum.photos/seed/${newCharName}_${Date.now()}/200/200`); }}
-              className="mt-2 text-[10px] font-bold text-primary hover:text-primary/80 flex items-center gap-1.5 transition-colors"
-            >
-              <Icons.RefreshCw size={12} /> Generate New Look
-            </button>
-          </div>
-        </div>
-        <div>
-          <label className="text-[9px] font-bold text-text-muted uppercase mb-1 block">Visual Description</label>
-          <textarea
-            className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white/90 focus:border-primary focus:outline-none resize-none placeholder:text-text-muted/30 min-h-[80px] focus:bg-black/60 transition-colors leading-relaxed"
-            value={newCharDesc}
-            onChange={(e) => setNewCharDesc(e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="flex gap-3 pt-2 border-t border-white/5 relative z-10">
-        <button onClick={resetCharacterForm} className="flex-1 py-2 rounded-lg text-xs font-bold text-text-muted hover:text-white hover:bg-white/5 transition-colors">Cancel</button>
-        <button onClick={handleSaveCharacter} className="flex-1 py-2 bg-primary hover:bg-primary/90 rounded-lg text-xs font-bold text-white shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2">
-          <Icons.Save size={14} /> {isEdit ? 'Save Changes' : 'Create'}
-        </button>
-      </div>
-    </div>
-  );
+      setIsCreatingChar(false);
+      setPendingImages([]);
+      setToast({ message: `"${result.name}" created successfully`, type: 'success' });
+      setTimeout(() => setToast(null), 4000);
+    } else {
+      setToast({ message: 'Failed to create character', type: 'error' });
+      setTimeout(() => setToast(null), 4000);
+    }
+  }, [createCharacter, pendingImages, uploadImage, refetchCharacters]);
+
+  // Character update handler
+  const handleUpdateCharacter = useCallback(async (data: CharacterFormData) => {
+    if (!editingCharacter) return;
+
+    const result = await updateCharacter(editingCharacter.id, {
+      name: data.name,
+      description: data.description || undefined,
+      styleLora: data.styleLora || undefined,
+    });
+
+    if (result) {
+      setEditingCharacter(null);
+      setToast({ message: `"${result.name}" updated successfully`, type: 'success' });
+      setTimeout(() => setToast(null), 4000);
+    } else {
+      setToast({ message: 'Failed to update character', type: 'error' });
+      setTimeout(() => setToast(null), 4000);
+    }
+  }, [editingCharacter, updateCharacter]);
+
+  // Character delete handler
+  const handleDeleteCharacter = useCallback(async () => {
+    if (!editingCharacter) return;
+
+    const success = await deleteCharacter(editingCharacter.id);
+    if (success) {
+      const name = editingCharacter.name;
+      setEditingCharacter(null);
+      setToast({ message: `"${name}" deleted successfully`, type: 'success' });
+      setTimeout(() => setToast(null), 4000);
+    } else {
+      setToast({ message: 'Failed to delete character', type: 'error' });
+      setTimeout(() => setToast(null), 4000);
+    }
+  }, [editingCharacter, deleteCharacter]);
+
+  // Character image upload handler
+  const handleUploadCharacterImage = useCallback(async (file: File) => {
+    if (!editingCharacter) return;
+
+    const result = await uploadImage(editingCharacter.id, file);
+    if (result) {
+      await refetchCharacters();
+      // Update editingCharacter with new image
+      const updated = backendCharacters.find(c => c.id === editingCharacter.id);
+      if (updated) {
+        setEditingCharacter(updated);
+      }
+    } else {
+      setToast({ message: 'Failed to upload image', type: 'error' });
+      setTimeout(() => setToast(null), 4000);
+    }
+  }, [editingCharacter, uploadImage, refetchCharacters, backendCharacters]);
+
+  // Character image remove handler
+  const handleRemoveCharacterImage = useCallback(async (index: number) => {
+    if (!editingCharacter) return;
+
+    const success = await deleteImage(editingCharacter.id, index);
+    if (success) {
+      await refetchCharacters();
+      const updated = backendCharacters.find(c => c.id === editingCharacter.id);
+      if (updated) {
+        setEditingCharacter(updated);
+      }
+    } else {
+      setToast({ message: 'Failed to remove image', type: 'error' });
+      setTimeout(() => setToast(null), 4000);
+    }
+  }, [editingCharacter, deleteImage, refetchCharacters, backendCharacters]);
+
+  // Keep editingCharacter synced with backendCharacters list
+  useEffect(() => {
+    if (editingCharacter) {
+      const updated = backendCharacters.find(c => c.id === editingCharacter.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(editingCharacter)) {
+        setEditingCharacter(updated);
+      }
+    }
+  }, [backendCharacters, editingCharacter]);
+
+  // Convert backend characters to library format for display
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  const libraryCharsFromBackend: Character[] = useMemo(() =>
+    backendCharacters.map(c => ({
+      id: c.id,
+      name: c.name,
+      description: c.description || '',
+      imageUrl: c.referenceImages?.[0] ? `${API_BASE}${c.referenceImages[0]}` : `https://picsum.photos/seed/${c.id}/200/200`,
+      stylePrompt: c.styleLora || undefined,
+    })), [backendCharacters]);
 
   // Loading state
   if (loading) {
@@ -896,14 +974,8 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
             setShowRightPanel={setShowRightPanel}
             isCreatingChar={isCreatingChar}
             setIsCreatingChar={setIsCreatingChar}
-            renderForm={renderForm}
-            resetCharacterForm={resetCharacterForm}
-            libraryCharacters={libraryCharacters}
-            editingCharacterId={editingCharacterId}
-            setEditingCharacterId={setEditingCharacterId}
-            setNewCharName={setNewCharName}
-            setNewCharDesc={setNewCharDesc}
-            setFormImageUrl={setFormImageUrl}
+            libraryCharacters={libraryCharsFromBackend.length > 0 ? libraryCharsFromBackend : libraryCharacters}
+            backendCharacters={backendCharacters}
             project={project}
             toggleCharacterInProject={toggleCharacterInProject}
             voiceCategory={voiceCategory}
@@ -916,6 +988,15 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
             setIsDraggingVoice={setIsDraggingVoice}
             onVoiceDrop={(e) => { e.preventDefault(); setIsDraggingVoice(false); setToast({ message: 'Voice cloning not implemented in V2 demo', type: 'error' }); }}
             onVoiceFileChange={(e) => setToast({ message: 'Voice cloning not implemented in V2 demo', type: 'error' })}
+            onCreateCharacter={handleCreateCharacter}
+            pendingImages={pendingImages}
+            onPendingImagesChange={setPendingImages}
+            editingCharacter={editingCharacter}
+            setEditingCharacter={setEditingCharacter}
+            onUpdateCharacter={handleUpdateCharacter}
+            onDeleteCharacter={handleDeleteCharacter}
+            onUploadImage={handleUploadCharacterImage}
+            onRemoveImage={handleRemoveCharacterImage}
           />
         )}
       </div>
