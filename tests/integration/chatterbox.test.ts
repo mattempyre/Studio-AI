@@ -376,4 +376,185 @@ describe('Chatterbox Integration Tests', () => {
       }
     });
   });
+
+  describe('Voice Cloning Integration', () => {
+    describe('Reference File Management', () => {
+      it('should list uploaded reference files', async () => {
+        const mockFiles = ['narrator.wav', 'character1.mp3', 'custom-voice.wav'];
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFiles,
+        });
+
+        const files = await client.getUploadedReferenceFiles();
+
+        expect(files).toEqual(mockFiles);
+        expect(files).toHaveLength(3);
+      });
+
+      it('should upload and track reference audio', async () => {
+        const mockFileContent = Buffer.from('mock audio content');
+        vi.mocked(fs.readFile).mockResolvedValueOnce(mockFileContent);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ files: ['narrator-voice.wav'] }),
+        });
+
+        const result = await client.uploadReferenceAudio('./samples/narrator-voice.wav');
+
+        expect(result.filename).toBe('narrator-voice.wav');
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8004/upload_reference',
+          expect.objectContaining({
+            method: 'POST',
+          })
+        );
+      });
+    });
+
+    describe('Voice Cloning Generation', () => {
+      it('should generate speech using cloned voice', async () => {
+        const mockWav = createMockWavBuffer(2000);
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => mockWav.buffer.slice(mockWav.byteOffset, mockWav.byteOffset + mockWav.byteLength),
+        });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue();
+
+        const params: SpeechGenerationParams = {
+          text: 'This voice should sound like the reference audio.',
+          referenceAudioFilename: 'narrator-voice.wav',
+          temperature: 0.85,
+        };
+
+        const result = await client.generateSpeech(params, './output/cloned.wav');
+
+        expect(result.filePath).toBe('./output/cloned.wav');
+        expect(result.durationMs).toBeGreaterThan(1900);
+        expect(result.durationMs).toBeLessThan(2100);
+
+        // Verify clone mode was used
+        const fetchCall = mockFetch.mock.calls[0];
+        const body = JSON.parse(fetchCall[1].body);
+        expect(body.voice_mode).toBe('clone');
+        expect(body.reference_audio_filename).toBe('narrator-voice.wav');
+        expect(body.temperature).toBe(0.85);
+      });
+
+      it('should handle full voice cloning workflow', async () => {
+        // Step 1: Upload reference audio
+        const mockFileContent = Buffer.from('mock wav data');
+        vi.mocked(fs.readFile).mockResolvedValueOnce(mockFileContent);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ files: ['my-voice.wav'] }),
+        });
+
+        const uploadResult = await client.uploadReferenceAudio('./my-voice.wav');
+        expect(uploadResult.filename).toBe('my-voice.wav');
+
+        // Step 2: Generate speech with cloned voice
+        const mockWav = createMockWavBuffer(1500);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => mockWav.buffer.slice(mockWav.byteOffset, mockWav.byteOffset + mockWav.byteLength),
+        });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue();
+
+        const speechResult = await client.generateSpeech(
+          {
+            text: 'Hello, this is my cloned voice!',
+            referenceAudioFilename: uploadResult.filename,
+          },
+          './output/cloned-output.wav'
+        );
+
+        expect(speechResult.filePath).toBe('./output/cloned-output.wav');
+        expect(speechResult.durationMs).toBeGreaterThan(0);
+      });
+
+      it('should generate multiple outputs with same cloned voice', async () => {
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue();
+
+        const sentences = [
+          'First sentence with cloned voice.',
+          'Second sentence with same voice.',
+          'Third and final sentence.',
+        ];
+
+        const results = [];
+        for (let i = 0; i < sentences.length; i++) {
+          const mockWav = createMockWavBuffer(1000 + i * 500);
+          mockFetch.mockResolvedValueOnce({
+            ok: true,
+            arrayBuffer: async () => mockWav.buffer.slice(mockWav.byteOffset, mockWav.byteOffset + mockWav.byteLength),
+          });
+
+          const result = await client.generateSpeech(
+            {
+              text: sentences[i],
+              referenceAudioFilename: 'shared-voice.wav',
+            },
+            `./output/sentence_${i + 1}.wav`
+          );
+          results.push(result);
+        }
+
+        expect(results).toHaveLength(3);
+
+        // All calls should use clone mode with same reference
+        for (const call of mockFetch.mock.calls) {
+          const body = JSON.parse(call[1].body);
+          expect(body.voice_mode).toBe('clone');
+          expect(body.reference_audio_filename).toBe('shared-voice.wav');
+        }
+      });
+    });
+
+    describe('Clone Mode Error Handling', () => {
+      it('should handle missing reference file gracefully', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          text: async () => 'Reference file not found: missing.wav',
+        });
+
+        await expect(
+          client.generateSpeech(
+            {
+              text: 'Test',
+              referenceAudioFilename: 'missing.wav',
+            },
+            './output/test.wav'
+          )
+        ).rejects.toThrow(ChatterboxError);
+      });
+
+      it('should handle server error during clone generation', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          text: async () => 'Voice cloning failed: model error',
+        });
+
+        await expect(
+          client.generateSpeech(
+            {
+              text: 'Test',
+              referenceAudioFilename: 'voice.wav',
+            },
+            './output/test.wav'
+          )
+        ).rejects.toMatchObject({
+          code: 'GENERATION_ERROR',
+        });
+      });
+    });
+  });
 });

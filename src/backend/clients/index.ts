@@ -35,4 +35,5 @@ export {
   type VoiceInfo,
   type SpeechGenerationParams,
   type SpeechGenerationResult,
+  type UploadReferenceResult,
 } from './chatterbox.js';

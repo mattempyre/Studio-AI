@@ -41,8 +41,10 @@ export const VOICE_PRESETS: Record<string, { name: string; description: string }
 export interface SpeechGenerationParams {
   /** Text to convert to speech */
   text: string;
-  /** Voice to use (preset name or custom voice ID) */
+  /** Voice to use (preset name or custom voice ID) - ignored if referenceAudioFilename is provided */
   voice?: ChatterboxVoice;
+  /** Reference audio filename for voice cloning (uploaded via uploadReferenceAudio) */
+  referenceAudioFilename?: string;
   /** Exaggeration level (0.0-1.0, default 0.5) */
   exaggeration?: number;
   /** CFG weight for generation (0.0-1.0, default 0.5) */
@@ -63,6 +65,16 @@ export interface SpeechGenerationResult {
   durationMs: number;
   /** Size of the audio file in bytes */
   fileSizeBytes: number;
+}
+
+/**
+ * Result of uploading reference audio for voice cloning
+ */
+export interface UploadReferenceResult {
+  /** Filename of the uploaded reference (use this in referenceAudioFilename) */
+  filename: string;
+  /** Original filename that was uploaded */
+  originalFilename: string;
 }
 
 /**
@@ -274,6 +286,90 @@ export class ChatterboxClient {
   }
 
   /**
+   * Get list of uploaded reference audio files (for voice cloning)
+   */
+  async getUploadedReferenceFiles(): Promise<string[]> {
+    try {
+      const response = await this.makeRequest('/get_reference_files', {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        return data as string[];
+      }
+
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Upload reference audio file for voice cloning
+   *
+   * @param filePath - Path to the audio file (.wav or .mp3)
+   * @returns Upload result with filename to use for generation
+   */
+  async uploadReferenceAudio(filePath: string): Promise<UploadReferenceResult> {
+    // Validate file extension
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext !== '.wav' && ext !== '.mp3') {
+      throw new ChatterboxError(
+        'Reference audio must be .wav or .mp3 format',
+        'INVALID_FORMAT',
+        { filePath, extension: ext }
+      );
+    }
+
+    // Read file from disk
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = await fs.readFile(filePath);
+    } catch (error) {
+      throw new ChatterboxError(
+        `Failed to read reference audio file: ${(error as Error).message}`,
+        'FILE_READ_ERROR',
+        { filePath }
+      );
+    }
+
+    // Create form data
+    const originalFilename = path.basename(filePath);
+    const formData = new FormData();
+    const blob = new Blob([fileBuffer], {
+      type: ext === '.wav' ? 'audio/wav' : 'audio/mpeg',
+    });
+    formData.append('files', blob, originalFilename);
+
+    // Upload to server
+    const response = await this.makeRequest('/upload_reference', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new ChatterboxError(
+        `Failed to upload reference audio: ${response.statusText}`,
+        'UPLOAD_ERROR',
+        { status: response.status, error: errorText }
+      );
+    }
+
+    // The server returns the filename(s) that were saved
+    // We return the filename for use in subsequent generations
+    return {
+      filename: originalFilename,
+      originalFilename,
+    };
+  }
+
+  /**
    * Generate speech from text
    *
    * @param params - Speech generation parameters
@@ -288,7 +384,15 @@ export class ChatterboxClient {
       throw new ChatterboxError('Text cannot be empty', 'INVALID_INPUT');
     }
 
-    // Try OpenAI-compatible endpoint first, then fallback to /tts
+    // Voice cloning only works with /tts endpoint, not OpenAI-compatible
+    const isCloneMode = !!params.referenceAudioFilename;
+
+    if (isCloneMode) {
+      // Clone mode: use /tts endpoint directly
+      return this.tryGenerateSpeech(params, outputPath, '/tts');
+    }
+
+    // Predefined voice: try OpenAI-compatible endpoint first, then fallback to /tts
     const endpoints = ['/v1/audio/speech', '/tts'];
     let lastError: Error | null = null;
 
@@ -316,31 +420,53 @@ export class ChatterboxClient {
     outputPath: string,
     endpoint: string
   ): Promise<SpeechGenerationResult> {
-    // Get voice filename - add .wav extension if needed
-    const voiceName = params.voice || 'Emily'; // Default to Emily
-    const voiceFilename = voiceName.endsWith('.wav') ? voiceName : `${voiceName}.wav`;
+    const isCloneMode = !!params.referenceAudioFilename;
 
-    // Build request body based on endpoint
-    const body =
-      endpoint === '/v1/audio/speech'
-        ? {
-            input: params.text,
-            voice: voiceFilename,
-            model: 'chatterbox',
-            response_format: 'wav',
-            speed: params.speed ?? 1.0,
-          }
-        : {
-            text: params.text,
-            voice_mode: 'predefined',
-            predefined_voice_id: voiceFilename,
-            output_format: 'wav',
-            split_text: true,
-            exaggeration: params.exaggeration,
-            cfg_weight: params.cfgWeight,
-            temperature: params.temperature,
-            speed_factor: params.speed,
-          };
+    // Build request body based on endpoint and voice mode
+    let body: Record<string, unknown>;
+
+    if (endpoint === '/v1/audio/speech') {
+      // OpenAI-compatible endpoint (only supports predefined voices)
+      const voiceName = params.voice || 'Emily';
+      const voiceFilename = voiceName.endsWith('.wav') ? voiceName : `${voiceName}.wav`;
+
+      body = {
+        input: params.text,
+        voice: voiceFilename,
+        model: 'chatterbox',
+        response_format: 'wav',
+        speed: params.speed ?? 1.0,
+      };
+    } else if (isCloneMode) {
+      // /tts endpoint with voice cloning
+      body = {
+        text: params.text,
+        voice_mode: 'clone',
+        reference_audio_filename: params.referenceAudioFilename,
+        output_format: 'wav',
+        split_text: true,
+        exaggeration: params.exaggeration,
+        cfg_weight: params.cfgWeight,
+        temperature: params.temperature,
+        speed_factor: params.speed,
+      };
+    } else {
+      // /tts endpoint with predefined voice
+      const voiceName = params.voice || 'Emily';
+      const voiceFilename = voiceName.endsWith('.wav') ? voiceName : `${voiceName}.wav`;
+
+      body = {
+        text: params.text,
+        voice_mode: 'predefined',
+        predefined_voice_id: voiceFilename,
+        output_format: 'wav',
+        split_text: true,
+        exaggeration: params.exaggeration,
+        cfg_weight: params.cfgWeight,
+        temperature: params.temperature,
+        speed_factor: params.speed,
+      };
+    }
 
     const response = await this.makeRequest(endpoint, {
       method: 'POST',

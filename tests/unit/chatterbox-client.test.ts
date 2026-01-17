@@ -11,6 +11,7 @@ import * as fs from 'fs/promises';
 vi.mock('fs/promises', () => ({
   mkdir: vi.fn(),
   writeFile: vi.fn(),
+  readFile: vi.fn(),
 }));
 
 // Mock fetch globally
@@ -324,6 +325,212 @@ describe('Chatterbox Client', () => {
         client.generateSpeech({ text: 'Hello' }, '/output/speech.wav')
       ).rejects.toMatchObject({
         code: 'CONNECTION_ERROR',
+      });
+    });
+  });
+
+  describe('voice cloning', () => {
+    describe('getUploadedReferenceFiles', () => {
+      it('should return list of reference files from server', async () => {
+        const mockFiles = ['voice1.wav', 'voice2.mp3', 'custom-ref.wav'];
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFiles,
+        });
+
+        const files = await client.getUploadedReferenceFiles();
+
+        expect(files).toEqual(mockFiles);
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8004/get_reference_files',
+          expect.objectContaining({ method: 'GET' })
+        );
+      });
+
+      it('should return empty array on server error', async () => {
+        mockFetch.mockRejectedValueOnce(new Error('Server error'));
+
+        const files = await client.getUploadedReferenceFiles();
+
+        expect(files).toEqual([]);
+      });
+
+      it('should return empty array when endpoint returns non-ok', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+        });
+
+        const files = await client.getUploadedReferenceFiles();
+
+        expect(files).toEqual([]);
+      });
+    });
+
+    describe('uploadReferenceAudio', () => {
+      it('should upload wav file successfully', async () => {
+        const mockFileContent = Buffer.from('mock wav content');
+        vi.mocked(fs.readFile).mockResolvedValueOnce(mockFileContent);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ files: ['my-voice.wav'] }),
+        });
+
+        const result = await client.uploadReferenceAudio('/path/to/my-voice.wav');
+
+        expect(result.filename).toBe('my-voice.wav');
+        expect(result.originalFilename).toBe('my-voice.wav');
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8004/upload_reference',
+          expect.objectContaining({ method: 'POST' })
+        );
+      });
+
+      it('should upload mp3 file successfully', async () => {
+        const mockFileContent = Buffer.from('mock mp3 content');
+        vi.mocked(fs.readFile).mockResolvedValueOnce(mockFileContent);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ files: ['speaker.mp3'] }),
+        });
+
+        const result = await client.uploadReferenceAudio('/path/to/speaker.mp3');
+
+        expect(result.filename).toBe('speaker.mp3');
+        expect(result.originalFilename).toBe('speaker.mp3');
+      });
+
+      it('should throw error for invalid file format', async () => {
+        await expect(
+          client.uploadReferenceAudio('/path/to/audio.ogg')
+        ).rejects.toMatchObject({
+          code: 'INVALID_FORMAT',
+        });
+      });
+
+      it('should throw error when file read fails', async () => {
+        vi.mocked(fs.readFile).mockRejectedValueOnce(new Error('ENOENT: file not found'));
+
+        await expect(
+          client.uploadReferenceAudio('/path/to/missing.wav')
+        ).rejects.toMatchObject({
+          code: 'FILE_READ_ERROR',
+        });
+      });
+
+      it('should throw error when upload fails', async () => {
+        const mockFileContent = Buffer.from('mock content');
+        vi.mocked(fs.readFile).mockResolvedValueOnce(mockFileContent);
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          text: async () => 'Server error',
+        });
+
+        await expect(
+          client.uploadReferenceAudio('/path/to/voice.wav')
+        ).rejects.toMatchObject({
+          code: 'UPLOAD_ERROR',
+        });
+      });
+    });
+
+    describe('generateSpeech with cloning', () => {
+      it('should generate speech with cloned voice', async () => {
+        const mockWav = createMockWavBuffer(1000);
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => mockWav.buffer.slice(mockWav.byteOffset, mockWav.byteOffset + mockWav.byteLength),
+        });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue();
+
+        const result = await client.generateSpeech(
+          {
+            text: 'Hello world',
+            referenceAudioFilename: 'my-voice.wav',
+          },
+          '/output/cloned-speech.wav'
+        );
+
+        expect(result.filePath).toBe('/output/cloned-speech.wav');
+        expect(result.durationMs).toBeGreaterThan(900);
+        expect(result.durationMs).toBeLessThan(1100);
+
+        // Verify it used /tts endpoint with clone mode
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8004/tts',
+          expect.objectContaining({
+            method: 'POST',
+            body: expect.stringContaining('"voice_mode":"clone"'),
+          })
+        );
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8004/tts',
+          expect.objectContaining({
+            body: expect.stringContaining('"reference_audio_filename":"my-voice.wav"'),
+          })
+        );
+      });
+
+      it('should use /tts endpoint directly for clone mode (no fallback)', async () => {
+        const mockWav = createMockWavBuffer(500);
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => mockWav.buffer.slice(mockWav.byteOffset, mockWav.byteOffset + mockWav.byteLength),
+        });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue();
+
+        await client.generateSpeech(
+          {
+            text: 'Test',
+            referenceAudioFilename: 'ref.wav',
+          },
+          '/output/speech.wav'
+        );
+
+        // Should only call /tts once, not try /v1/audio/speech first
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://localhost:8004/tts',
+          expect.any(Object)
+        );
+      });
+
+      it('should include generation parameters with clone mode', async () => {
+        const mockWav = createMockWavBuffer(500);
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => mockWav.buffer.slice(mockWav.byteOffset, mockWav.byteOffset + mockWav.byteLength),
+        });
+        vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+        vi.mocked(fs.writeFile).mockResolvedValue();
+
+        await client.generateSpeech(
+          {
+            text: 'Test',
+            referenceAudioFilename: 'ref.wav',
+            exaggeration: 0.7,
+            cfgWeight: 0.5,
+            temperature: 0.9,
+            speed: 1.2,
+          },
+          '/output/speech.wav'
+        );
+
+        const lastCall = mockFetch.mock.calls[0];
+        const body = JSON.parse(lastCall[1].body);
+
+        expect(body.voice_mode).toBe('clone');
+        expect(body.reference_audio_filename).toBe('ref.wav');
+        expect(body.exaggeration).toBe(0.7);
+        expect(body.cfg_weight).toBe(0.5);
+        expect(body.temperature).toBe(0.9);
+        expect(body.speed_factor).toBe(1.2);
       });
     });
   });
