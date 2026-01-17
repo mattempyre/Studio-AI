@@ -16,6 +16,51 @@ export interface ScriptSection {
   audioUrl?: string; // New field for persisting generated audio
 }
 
+// Backend data model types (sections/sentences structure)
+export interface BackendSentence {
+  id: string;
+  sectionId: string;
+  text: string;
+  order: number;
+  imagePrompt: string | null;
+  videoPrompt: string | null;
+  cameraMovement: string;
+  motionStrength: number;
+  audioFile: string | null;
+  audioDuration: number | null;
+  imageFile: string | null;
+  videoFile: string | null;
+  isAudioDirty: boolean;
+  isImageDirty: boolean;
+  isVideoDirty: boolean;
+  status: 'pending' | 'generating' | 'completed' | 'failed';
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+export interface BackendSection {
+  id: string;
+  projectId: string;
+  title: string;
+  order: number;
+  sentences: BackendSentence[];
+  createdAt: Date | null;
+}
+
+export interface BackendProject {
+  id: string;
+  name: string;
+  topic: string | null;
+  targetDuration: number;
+  visualStyle: string;
+  voiceId: string | null;
+  status: string;
+  sections: BackendSection[];
+  cast: string[];
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
 export interface TextOverlay {
   id: string;
   text: string;

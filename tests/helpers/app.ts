@@ -12,6 +12,8 @@ export async function createTestApp() {
   const { charactersRouter } = await import('../../src/backend/api/characters.js');
   const { healthRouter } = await import('../../src/backend/api/health.js');
   const { scriptsRouter } = await import('../../src/backend/api/scripts.js');
+  const { sectionsRouter } = await import('../../src/backend/api/sections.js');
+  const { sentencesRouter } = await import('../../src/backend/api/sentences.js');
 
   const app = express();
 
@@ -21,6 +23,8 @@ export async function createTestApp() {
   app.use('/api/v1/health', healthRouter);
   app.use('/api/v1/projects', projectsRouter);
   app.use('/api/v1/characters', charactersRouter);
+  app.use('/api/v1/sections', sectionsRouter);
+  app.use('/api/v1/sentences', sentencesRouter);
   // Scripts routes are nested under projects for context
   app.use('/api/v1/projects', scriptsRouter);
 
