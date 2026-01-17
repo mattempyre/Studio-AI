@@ -54,3 +54,5 @@ playwright/.cache/
 .claude/
 image_test/family.jpg
 .playwright-mcp/*
+test-image.png
+test-image.jpg

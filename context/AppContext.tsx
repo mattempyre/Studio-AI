@@ -1,29 +1,27 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Project, Character, Voice, User } from '../types';
+import { Project, Character, Voice, User, BackendCharacter } from '../types';
 import { INITIAL_PROJECT } from '../constants';
 import { projectsApi } from '../services/backendApi';
 
-// Initial library data
-const INITIAL_LIBRARY: Character[] = [
-  {
-    id: 'char_1',
-    name: 'Dr. Ada',
-    description: 'A futuristic AI architect with glowing blue cybernetic implants.',
-    imageUrl: 'https://picsum.photos/seed/ada/200/200',
-  },
-  {
-    id: 'char_2',
-    name: 'Kai',
-    description: 'A rebellious cyberpunk hacker with neon green hair and AR goggles.',
-    imageUrl: 'https://picsum.photos/seed/kai/200/200',
-  },
-  {
-    id: 'char_3',
-    name: 'The narrator',
-    description: 'A shadowy figure in a trench coat, face obscured by smoke.',
-    imageUrl: 'https://picsum.photos/seed/narrator/200/200',
-  }
-];
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+// Helper to convert BackendCharacter to Character format
+function mapBackendCharacterToCharacter(bc: BackendCharacter): Character {
+  // referenceImages contains relative paths like "/uploads/characters/..."
+  // Need to prepend API_BASE to make them absolute URLs
+  const firstImage = bc.referenceImages?.[0];
+  const imageUrl = firstImage
+    ? `${API_BASE}${firstImage}`
+    : `https://picsum.photos/seed/${bc.id}/200/200`;
+
+  return {
+    id: bc.id,
+    name: bc.name,
+    description: bc.description || '',
+    imageUrl,
+    stylePrompt: bc.styleLora || undefined,
+  };
+}
 
 // Layout projects (simplified for sidebar dropdown)
 interface LayoutProject {
@@ -47,6 +45,7 @@ interface AppContextType {
   // Characters
   libraryCharacters: Character[];
   setLibraryCharacters: React.Dispatch<React.SetStateAction<Character[]>>;
+  refreshLibraryCharacters: () => Promise<void>;
 
   // Voices
   clonedVoices: Voice[];
@@ -92,8 +91,25 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [layoutProjects, setLayoutProjects] = useState<LayoutProject[]>([]);
 
   // Workspace Level State
-  const [libraryCharacters, setLibraryCharacters] = useState<Character[]>(INITIAL_LIBRARY);
+  const [libraryCharacters, setLibraryCharacters] = useState<Character[]>([]);
   const [clonedVoices, setClonedVoices] = useState<Voice[]>([]);
+
+  // Fetch library characters from backend
+  const refreshLibraryCharacters = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/characters`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch characters: ${response.statusText}`);
+      }
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        const mapped = data.data.map(mapBackendCharacterToCharacter);
+        setLibraryCharacters(mapped);
+      }
+    } catch (error) {
+      console.error('Failed to load library characters:', error);
+    }
+  }, []);
 
   // Fetch layout projects from backend
   const refreshLayoutProjects = useCallback(async () => {
@@ -109,6 +125,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   useEffect(() => {
     refreshLayoutProjects();
   }, [refreshLayoutProjects]);
+
+  // Load library characters on mount
+  useEffect(() => {
+    refreshLibraryCharacters();
+  }, [refreshLibraryCharacters]);
 
   // Handlers
   const handleProjectUpdate = (updatedProject: Project) => {
@@ -196,6 +217,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     refreshLayoutProjects,
     libraryCharacters,
     setLibraryCharacters,
+    refreshLibraryCharacters,
     clonedVoices,
     setClonedVoices,
     handleProjectUpdate,

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { config } from 'dotenv';
+import { join } from 'path';
 import { db } from './db/index.js';
 import { projectsRouter } from './api/projects.js';
 import { charactersRouter } from './api/characters.js';
@@ -37,6 +38,13 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+// Static file serving for uploaded character images
+const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), 'data');
+app.use('/uploads/characters', express.static(join(DATA_DIR, 'characters'), {
+  maxAge: '1y', // Cache for 1 year since images are versioned by index
+  immutable: true,
+}));
 
 // Inngest serve endpoint - handles function registration and invocation
 // This must be registered before other routes to ensure Inngest can reach it

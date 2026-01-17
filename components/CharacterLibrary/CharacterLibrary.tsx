@@ -115,6 +115,7 @@ export const CharacterLibrary: React.FC = () => {
   const [deletingCharacter, setDeletingCharacter] = useState<BackendCharacter | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     const id = Date.now().toString();
@@ -137,12 +138,27 @@ export const CharacterLibrary: React.FC = () => {
     });
 
     if (result) {
+      // Upload any pending images
+      if (pendingImages.length > 0) {
+        let uploadedCount = 0;
+        for (const file of pendingImages) {
+          const uploadResult = await uploadImage(result.id, file);
+          if (uploadResult) {
+            uploadedCount++;
+          }
+        }
+        if (uploadedCount > 0) {
+          await refetch(); // Refresh to get updated character with images
+        }
+      }
+
       setIsCreating(false);
+      setPendingImages([]);
       showToast(`"${result.name}" created successfully`, 'success');
     } else {
       showToast('Failed to create character', 'error');
     }
-  }, [createCharacter, showToast]);
+  }, [createCharacter, pendingImages, uploadImage, refetch, showToast]);
 
   const handleUpdate = useCallback(async (data: CharacterFormData) => {
     if (!editingCharacter) return;
@@ -154,8 +170,8 @@ export const CharacterLibrary: React.FC = () => {
     });
 
     if (result) {
-      // Update local editing state with new data
-      setEditingCharacter(result);
+      // Close modal after successful save
+      setEditingCharacter(null);
       showToast(`"${result.name}" updated successfully`, 'success');
     } else {
       showToast('Failed to update character', 'error');
@@ -278,8 +294,10 @@ export const CharacterLibrary: React.FC = () => {
       {/* Create Modal */}
       {isCreating && (
         <CharacterModal
-          onClose={() => setIsCreating(false)}
+          onClose={() => { setIsCreating(false); setPendingImages([]); }}
           onSave={handleCreate}
+          pendingImages={pendingImages}
+          onPendingImagesChange={setPendingImages}
         />
       )}
 
