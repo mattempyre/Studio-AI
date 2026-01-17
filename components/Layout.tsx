@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link, useLocation, useParams, useNavigate } from '@tanstack/react-router';
 import * as Icons from './Icons';
 import { ViewState, User, Project } from '../types';
+import ProjectDropdown from './Sidebar/ProjectDropdown';
 
 interface LayoutProject {
   id: string;
@@ -32,9 +33,6 @@ const Layout: React.FC<LayoutProps> = ({
   onUpdateProject,
   onCreateProject
 }) => {
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [tempTitle, setTempTitle] = useState('');
-
   // Get current route info
   const location = useLocation();
   const params = useParams({ strict: false }) as { projectId?: string };
@@ -62,35 +60,6 @@ const Layout: React.FC<LayoutProps> = ({
       to: '/project/$projectId/script',
       params: { projectId }
     });
-  };
-
-  useEffect(() => {
-    if (activeProject) {
-      setTempTitle(activeProject.name);
-    }
-  }, [activeProject]);
-
-  const startEditing = () => {
-    if (activeProject) {
-      setTempTitle(activeProject.name);
-      setIsEditingTitle(true);
-    }
-  };
-
-  const saveTitle = () => {
-    if (activeProject && tempTitle.trim()) {
-      onUpdateProject(activeProject.id, { name: tempTitle });
-    }
-    setIsEditingTitle(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      saveTitle();
-    } else if (e.key === 'Escape') {
-      setIsEditingTitle(false);
-      setTempTitle(activeProject?.name || '');
-    }
   };
 
   // Logic for Dynamic Button and Breadcrumbs
@@ -160,6 +129,7 @@ const Layout: React.FC<LayoutProps> = ({
 
           {/* Nav Items */}
           <nav className="flex flex-col gap-2 flex-grow">
+            {/* Global Navigation */}
             {/* Dashboard Link */}
             <Link
               to="/"
@@ -184,43 +154,65 @@ const Layout: React.FC<LayoutProps> = ({
               {currentView === 'characters' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary hidden lg:block"></div>}
             </Link>
 
-            {/* Project-specific nav items */}
-            {[
-              { id: 'script', icon: Icons.Type, label: 'Script & Audio', path: 'script' },
-              { id: 'storyboard', icon: Icons.Grid, label: 'Storyboard', path: 'storyboard' },
-              { id: 'video', icon: Icons.Film, label: 'Video Editor', path: 'video' },
-            ].map((item) => {
-              const isActive = currentView === item.id;
-              // Only enable if we have an active project
-              const canNavigate = !!activeProjectId;
+            {/* Project Scope Separator & Dropdown */}
+            <div className="my-3 pt-3 border-t border-white/10">
+              <label className="text-[9px] text-text-muted font-bold uppercase tracking-wider px-4 mb-2 block hidden lg:block">
+                Project
+              </label>
+              <ProjectDropdown
+                projects={projects}
+                activeProjectId={activeProjectId || null}
+                onSelectProject={handleSelectProject}
+                onCreateProject={onCreateProject}
+                onUpdateProject={onUpdateProject}
+                isCollapsed={false}
+              />
+            </div>
 
-              if (!canNavigate) {
+            {/* Project-specific Navigation */}
+            <div className="pt-2 border-t border-white/5">
+              {[
+                { id: 'script', icon: Icons.Type, label: 'Script & Audio', path: 'script' },
+                { id: 'storyboard', icon: Icons.Grid, label: 'Storyboard', path: 'storyboard' },
+                { id: 'video', icon: Icons.Film, label: 'Video Editor', path: 'video' },
+              ].map((item) => {
+                const isActive = currentView === item.id;
+                // Only enable if we have an active project
+                const canNavigate = !!activeProjectId;
+
+                if (!canNavigate) {
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl text-text-muted/30 cursor-not-allowed relative group/disabled"
+                      title="Select a project first"
+                    >
+                      <item.icon size={20} />
+                      <p className="text-sm font-medium hidden lg:block">{item.label}</p>
+                      {/* Tooltip for disabled state */}
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-background-dark border border-white/10 rounded text-xs text-text-muted whitespace-nowrap opacity-0 group-hover/disabled:opacity-100 transition-opacity pointer-events-none hidden lg:block z-50">
+                        Select a project first
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
-                  <div
+                  <Link
                     key={item.id}
-                    className="flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl text-text-muted/50 cursor-not-allowed"
+                    to={`/project/$projectId/${item.path}` as any}
+                    params={{ projectId: activeProjectId }}
+                    className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${
+                      isActive ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
+                    }`}
                   >
-                    <item.icon size={20} />
+                    <item.icon size={20} className={isActive ? 'text-primary' : ''} />
                     <p className="text-sm font-medium hidden lg:block">{item.label}</p>
-                  </div>
+                    {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary hidden lg:block"></div>}
+                  </Link>
                 );
-              }
-
-              return (
-                <Link
-                  key={item.id}
-                  to={`/project/$projectId/${item.path}` as any}
-                  params={{ projectId: activeProjectId }}
-                  className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${
-                    isActive ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
-                  }`}
-                >
-                  <item.icon size={20} className={isActive ? 'text-primary' : ''} />
-                  <p className="text-sm font-medium hidden lg:block">{item.label}</p>
-                  {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary hidden lg:block"></div>}
-                </Link>
-              );
-            })}
+              })}
+            </div>
           </nav>
 
           {/* Credits */}
@@ -261,61 +253,15 @@ const Layout: React.FC<LayoutProps> = ({
                  </button>
             )}
 
-            {isInCreationFlow ? (
-                /* Project Context & Rename */
+            {isInCreationFlow && activeProject ? (
+                /* Project Context Display (dropdown moved to sidebar) */
                 <div className="hidden md:flex flex-col justify-center border-l border-white/10 pl-6 h-8">
                     <label className="text-[9px] text-text-muted font-bold uppercase tracking-wider leading-none mb-1">Active Project</label>
-                    <div className="flex items-center gap-2 group/edit">
-                        {isEditingTitle ? (
-                            <input
-                            autoFocus
-                            value={tempTitle}
-                            onChange={(e) => setTempTitle(e.target.value)}
-                            onBlur={saveTitle}
-                            onKeyDown={handleKeyDown}
-                            className="bg-transparent border-b border-primary text-sm font-bold text-white focus:outline-none w-48"
-                            />
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <div className="relative">
-                                    <select
-                                        value={activeProjectId}
-                                        onChange={async (e) => {
-                                            if (e.target.value === 'new_project_action') {
-                                                const newProjectId = await Promise.resolve(onCreateProject());
-                                                navigate({
-                                                  to: '/project/$projectId/script',
-                                                  params: { projectId: newProjectId }
-                                                });
-                                            } else {
-                                                handleSelectProject(e.target.value);
-                                            }
-                                        }}
-                                        className="appearance-none bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer pr-5 truncate max-w-[200px]"
-                                    >
-                                        {projects.map(p => (
-                                            <option key={p.id} value={p.id} className="bg-background-dark text-white">
-                                                {p.name}
-                                            </option>
-                                        ))}
-                                        <option value="new_project_action" className="bg-background-dark text-primary font-bold">
-                                            + Create New Project
-                                        </option>
-                                    </select>
-                                    <Icons.ChevronDown size={12} className="text-text-muted absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                </div>
-                                <button
-                                    onClick={startEditing}
-                                    className="opacity-0 group-hover/edit:opacity-100 text-text-muted hover:text-primary transition-all"
-                                    title="Rename Project"
-                                >
-                                    <Icons.Edit3 size={12} />
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    <p className="text-sm font-bold text-white truncate max-w-[200px]" title={activeProject.name}>
+                        {activeProject.name}
+                    </p>
                 </div>
-            ) : (
+            ) : !isInCreationFlow && (
                 /* Dashboard Search */
                 <div className="relative group w-64 hidden md:block">
                     <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-white transition-colors" size={18} />
