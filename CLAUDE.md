@@ -139,3 +139,62 @@ When developing or modifying features:
   - Edge cases
   - Error handling
 - Run tests to verify they pass before considering the feature complete
+
+## Story Development Workflow
+
+### Git Worktrees for Parallel Development
+
+Use git worktrees to work on multiple stories in parallel. Each story should have its own worktree to enable concurrent development without branch switching.
+
+```bash
+# Create a worktree for a story
+git worktree add ../Studio-AI-STORY-XXX -b feature/STORY-XXX-description
+
+# List active worktrees
+git worktree list
+
+# Remove a worktree after merging
+git worktree remove ../Studio-AI-STORY-XXX
+```
+
+**Worktree naming convention:** `../Studio-AI-STORY-{ID}` (sibling directory to main repo)
+
+### Story Dependencies
+
+Before starting a story, verify that all dependent stories are completed:
+
+1. Check the story document in `docs/stories/STORY-XXX.md` for dependencies
+2. Check the sprint plan in `docs/sprint-plan-*.md` for dependency graph
+3. Verify dependent stories are merged to main before starting
+
+**Dependency resolution:**
+- If dependencies are incomplete, either wait or work on a different story
+- Stories without dependencies can be worked on immediately
+- Multiple independent stories can run in parallel using separate worktrees
+
+### Parallel Development Example
+
+```bash
+# Story A has no dependencies - start immediately
+git worktree add ../Studio-AI-STORY-010 -b feature/STORY-010-script-editor
+
+# Story B depends on A - wait for A to merge, or work on C instead
+# Story C is independent - can start in parallel with A
+git worktree add ../Studio-AI-STORY-011 -b feature/STORY-011-character-crud
+
+# After completing work in a worktree
+cd ../Studio-AI-STORY-010
+git add . && git commit -m "feat(STORY-010): ..."
+git push origin feature/STORY-010-script-editor
+# Create PR, merge, then clean up
+cd ../Studio-AI
+git worktree remove ../Studio-AI-STORY-010
+```
+
+### Sprint Workflow
+
+1. Review sprint plan to identify independent stories
+2. Create worktrees for stories that can run in parallel
+3. Respect dependency order - don't start dependent stories until prerequisites merge
+4. Run tests in each worktree before committing
+5. Clean up worktrees after stories are merged
