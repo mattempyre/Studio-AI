@@ -132,3 +132,19 @@ export async function deleteProjectMedia(projectId: string): Promise<void> {
     }
   }
 }
+
+/**
+ * Specific path helpers for the generation engine
+ */
+
+export function getAudioPath(projectId: string, sentenceId: string): string {
+  return path.join(getProjectMediaDir(projectId, 'audio'), `${sentenceId}.wav`);
+}
+
+export function getImagePath(projectId: string, sentenceId: string): string {
+  return path.join(getProjectMediaDir(projectId, 'images'), `${sentenceId}.png`);
+}
+
+export function getVideoPath(projectId: string, sentenceId: string): string {
+  return path.join(getProjectMediaDir(projectId, 'videos'), `${sentenceId}.mp4`);
+}

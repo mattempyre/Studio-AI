@@ -11,4 +11,5 @@ import { inngest, functions } from '../inngest/index.js';
 export const inngestHandler = serve({
   client: inngest,
   functions,
+  signingKey: process.env.INNGEST_SIGNING_KEY,
 });

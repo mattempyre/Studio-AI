@@ -343,7 +343,7 @@ As a creator, I want to add characters to my project cast so they're included in
 
 ### EPIC-03: Voice Generation (FR-3xx)
 
-#### STORY-014: Audio Generation Job
+#### STORY-014: Audio Generation Job [DONE]
 **Epic:** Voice Generation
 **Priority:** Must Have
 **Points:** 5

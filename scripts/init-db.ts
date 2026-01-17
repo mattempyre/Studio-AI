@@ -90,25 +90,49 @@ CREATE TABLE IF NOT EXISTS sentences (
   FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE
 );
 
+-- Script outlines table (for long-form scripts)
+CREATE TABLE IF NOT EXISTS script_outlines (
+  id TEXT PRIMARY KEY NOT NULL,
+  project_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  total_target_minutes INTEGER NOT NULL,
+  visual_style TEXT DEFAULT 'cinematic' NOT NULL,
+  sections TEXT NOT NULL,
+  status TEXT DEFAULT 'draft' NOT NULL,
+  running_summary TEXT,
+  covered_topics TEXT DEFAULT '[]',
+  current_section_index INTEGER DEFAULT 0,
+  created_at INTEGER,
+  updated_at INTEGER,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 -- Generation jobs table
 CREATE TABLE IF NOT EXISTS generation_jobs (
   id TEXT PRIMARY KEY NOT NULL,
   sentence_id TEXT,
   project_id TEXT,
+  outline_id TEXT,
   job_type TEXT NOT NULL,
   status TEXT DEFAULT 'queued' NOT NULL,
   progress INTEGER DEFAULT 0 NOT NULL,
   inngest_run_id TEXT,
   error_message TEXT,
   result_file TEXT,
+  total_steps INTEGER,
+  current_step INTEGER,
+  step_name TEXT,
   started_at INTEGER,
   completed_at INTEGER,
   created_at INTEGER,
   FOREIGN KEY (sentence_id) REFERENCES sentences(id) ON DELETE CASCADE,
-  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (outline_id) REFERENCES script_outlines(id) ON DELETE CASCADE
 );
 
 -- Create indexes for foreign keys
+CREATE INDEX IF NOT EXISTS idx_outlines_project ON script_outlines(project_id);
 CREATE INDEX IF NOT EXISTS idx_sections_project ON sections(project_id);
 CREATE INDEX IF NOT EXISTS idx_sentences_section ON sentences(section_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_sentence ON generation_jobs(sentence_id);

@@ -16,6 +16,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "setup:ports": "tsx scripts/setup-worktree-ports.ts",
+    "trigger-audio": "dotenv -e .env.local -- tsx scripts/test-audio-job.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.35.0",
+    "@tanstack/react-router": "^1.151.1",
     "better-sqlite3": "^11.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

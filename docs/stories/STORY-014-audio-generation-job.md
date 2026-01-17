@@ -3,10 +3,35 @@
 **Epic:** Voice Generation (EPIC-03)
 **Priority:** Must Have
 **Story Points:** 5
-**Status:** Not Started
-**Assigned To:** Unassigned
+**Status:** review
+**Assigned To:** Amelia
 **Created:** 2026-01-17
 **Sprint:** 2
+
+---
+
+## Dev Agent Record (Amelia)
+
+### Implementation Plan
+- [x] Create `src/backend/inngest/functions/generateAudio.ts` with Chatterbox integration.
+- [x] Add `audio/generate` event to `StudioEvents` in `src/backend/inngest/client.ts`.
+- [x] Register `generateAudio` in `src/backend/inngest/functions/index.ts`.
+- [x] Register `generateAudio` in `src/backend/inngest/index.ts`.
+- [x] Verify `src/backend/services/outputPaths.ts` contains `getAudioPath`.
+- [x] Write integration test for audio generation job.
+
+### Debug Log
+- 2026-01-17: Starting implementation of Audio Generation Job. Verified ChatterboxClient is ready.
+- 2026-01-17: Implemented `generateAudioFunction` with job tracking and progress broadcasting.
+- 2026-01-17: Added specific path helpers to `outputPaths.ts`.
+- 2026-01-17: Verified with unit tests.
+
+### Completion Notes
+- Implemented the core audio generation engine using Inngest.
+- Connected to Chatterbox TTS service.
+- Added real-time progress updates via WebSockets.
+- Added duration extraction and database persistence.
+- Concurrency limited to 4 as per requirements.
 
 ---
 
@@ -53,19 +78,19 @@ Each sentence in the script needs corresponding audio narration. The Chatterbox 
 
 ## Acceptance Criteria
 
-- [ ] Inngest function `audio/generate` handles single sentence
-- [ ] Function calls Chatterbox TTS API with sentence text
-- [ ] Voice selection from project settings (voiceId field)
-- [ ] WAV file stored at `data/projects/{projectId}/audio/{sentenceId}.wav`
-- [ ] Audio duration extracted (milliseconds) and stored in sentence record
-- [ ] Sentence `audioFile` field updated with file path
-- [ ] Sentence `isAudioDirty` flag cleared on success
-- [ ] Sentence `status` updated during generation (generating → completed/failed)
-- [ ] Job record created in `generation_jobs` table
-- [ ] Progress updates broadcast via WebSocket
-- [ ] Retry on failure (max 3 attempts, exponential backoff)
-- [ ] Error message stored in job record on failure
-- [ ] Concurrency limit: 4 parallel audio jobs
+- [x] Inngest function `audio/generate` handles single sentence
+- [x] Function calls Chatterbox TTS API with sentence text
+- [x] Voice selection from project settings (voiceId field)
+- [x] WAV file stored at `data/projects/{projectId}/audio/{sentenceId}.wav`
+- [x] Audio duration extracted (milliseconds) and stored in sentence record
+- [x] Sentence `audioFile` field updated with file path
+- [x] Sentence `isAudioDirty` flag cleared on success
+- [x] Sentence `status` updated during generation (generating → completed/failed)
+- [x] Job record created in `generation_jobs` table
+- [x] Progress updates broadcast via WebSocket
+- [x] Retry on failure (max 3 attempts, exponential backoff)
+- [x] Error message stored in job record on failure
+- [x] Concurrency limit: 4 parallel audio jobs
 
 ---
 
