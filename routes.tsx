@@ -6,7 +6,7 @@ import {
   Navigate,
   redirect,
 } from '@tanstack/react-router';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
@@ -15,6 +15,8 @@ import Storyboard from './components/Storyboard';
 import VideoPreview from './components/VideoPreview';
 import CharacterLibrary from './components/CharacterLibrary';
 import { useAppContext, AppProvider } from './context/AppContext';
+import { projectsApi } from './services/backendApi';
+import type { BackendProject } from './types';
 
 // Root Layout Component - wraps all routes with AppProvider and Layout
 function RootLayout() {
@@ -66,29 +68,79 @@ function LayoutWrapper() {
 // Page Components that extract params and provide to existing components
 
 function DashboardPage() {
-  const { user, projects, handleCreateProject } = useAppContext();
+  const { user } = useAppContext();
+  const [backendProjects, setBackendProjects] = useState<BackendProject[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch projects from backend
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        setIsLoading(true);
+        const result = await projectsApi.list();
+        setBackendProjects(result.projects);
+      } catch (error) {
+        console.error('Failed to load projects:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProjects();
+  }, []);
+
+  const handleRefresh = async () => {
+    try {
+      setIsLoading(true);
+      const result = await projectsApi.list();
+      setBackendProjects(result.projects);
+    } catch (error) {
+      console.error('Failed to refresh projects:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateProject = async (): Promise<string> => {
+    try {
+      const newProject = await projectsApi.create({
+        name: 'Untitled Project',
+        targetDuration: 8,
+        visualStyle: 'cinematic',
+      });
+      // Refresh the list
+      const result = await projectsApi.list();
+      setBackendProjects(result.projects);
+      return newProject.id;
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      // Generate a fallback ID
+      return `proj_${Date.now()}`;
+    }
+  };
 
   if (!user) return null;
 
-  // Transform frontend Project[] to Dashboard's expected format
-  const dashboardProjects = projects.map(p => ({
+  // Transform backend projects to Dashboard's expected format
+  const dashboardProjects = backendProjects.map(p => ({
     id: p.id,
     name: p.name,
-    topic: null,
-    targetDuration: 5,
-    visualStyle: p.visualStyle || 'Cinematic',
+    topic: p.topic,
+    targetDuration: p.targetDuration,
+    visualStyle: p.visualStyle || 'cinematic',
     status: p.status,
-    sectionCount: p.script?.length || 0,
-    sentenceCount: p.scenes?.length || 0,
+    sectionCount: p.sectionCount || 0,
+    sentenceCount: p.sentenceCount || 0,
     createdAt: p.createdAt ? new Date(p.createdAt) : null,
-    updatedAt: p.lastEdited ? new Date(p.lastEdited) : null,
+    updatedAt: p.updatedAt ? new Date(p.updatedAt) : null,
   }));
 
   return (
     <Dashboard
       user={user}
       projects={dashboardProjects}
+      isLoading={isLoading}
       onCreateProject={handleCreateProject}
+      onRefresh={handleRefresh}
     />
   );
 }

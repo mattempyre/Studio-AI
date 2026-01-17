@@ -22,7 +22,7 @@ interface DashboardProps {
   user: User;
   projects: DashboardProject[];
   isLoading?: boolean;
-  onCreateProject: () => string; // Returns new project ID
+  onCreateProject: () => string | Promise<string>; // Returns new project ID (sync or async)
   onRefresh?: () => void;
 }
 
@@ -34,13 +34,20 @@ const Dashboard: React.FC<DashboardProps> = ({
   onRefresh
 }) => {
   const navigate = useNavigate();
+  const [isCreating, setIsCreating] = React.useState(false);
 
-  const handleCreateProject = () => {
-    const newProjectId = onCreateProject();
-    navigate({
-      to: '/project/$projectId/script',
-      params: { projectId: newProjectId }
-    });
+  const handleCreateProject = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const newProjectId = await Promise.resolve(onCreateProject());
+      navigate({
+        to: '/project/$projectId/script',
+        params: { projectId: newProjectId }
+      });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleSelectProject = (projectId: string) => {
