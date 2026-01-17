@@ -1,6 +1,11 @@
 import { eq, and, desc } from 'drizzle-orm';
 import { db, generationJobs, type GenerationJob, type NewGenerationJob } from '../db/index.js';
 import { nanoid } from 'nanoid';
+import {
+  broadcastProgress,
+  broadcastJobComplete,
+  broadcastJobFailed,
+} from '../websocket/index.js';
 
 export type JobType = 'script' | 'script-long' | 'audio' | 'image' | 'video' | 'export';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
@@ -197,5 +202,120 @@ export const jobService = {
     await db.update(generationJobs)
       .set(params)
       .where(eq(generationJobs.id, jobId));
+  },
+
+  // ===========================================================================
+  // Broadcast-enabled methods (STORY-007)
+  // These methods update the database AND broadcast to WebSocket clients
+  // ===========================================================================
+
+  /**
+   * Update job progress and broadcast to WebSocket clients.
+   * Use this from Inngest functions to notify clients in real-time.
+   */
+  async updateProgressWithBroadcast(
+    jobId: string,
+    progress: number,
+    options?: {
+      projectId?: string;
+      jobType?: JobType;
+      sentenceId?: string;
+      message?: string;
+      totalSteps?: number;
+      currentStep?: number;
+      stepName?: string;
+    }
+  ): Promise<void> {
+    // Update database
+    await db.update(generationJobs)
+      .set({
+        progress: Math.min(100, Math.max(0, progress)),
+        ...(options?.totalSteps !== undefined && { totalSteps: options.totalSteps }),
+        ...(options?.currentStep !== undefined && { currentStep: options.currentStep }),
+        ...(options?.stepName && { stepName: options.stepName }),
+      })
+      .where(eq(generationJobs.id, jobId));
+
+    // Broadcast if we have the required info
+    if (options?.projectId && options?.jobType) {
+      broadcastProgress({
+        projectId: options.projectId,
+        jobId,
+        jobType: options.jobType,
+        progress,
+        sentenceId: options.sentenceId,
+        message: options.message,
+        totalSteps: options.totalSteps,
+        currentStep: options.currentStep,
+        stepName: options.stepName,
+      });
+    }
+  },
+
+  /**
+   * Mark job as completed and broadcast to WebSocket clients.
+   */
+  async markCompletedWithBroadcast(
+    jobId: string,
+    options: {
+      projectId: string;
+      jobType: JobType;
+      sentenceId?: string;
+      resultFile?: string;
+      duration?: number;
+    }
+  ): Promise<void> {
+    // Update database
+    await db.update(generationJobs)
+      .set({
+        status: 'completed',
+        progress: 100,
+        completedAt: new Date(),
+        ...(options.resultFile && { resultFile: options.resultFile }),
+      })
+      .where(eq(generationJobs.id, jobId));
+
+    // Broadcast completion
+    broadcastJobComplete({
+      projectId: options.projectId,
+      jobId,
+      jobType: options.jobType,
+      sentenceId: options.sentenceId,
+      result: {
+        file: options.resultFile,
+        duration: options.duration,
+      },
+    });
+  },
+
+  /**
+   * Mark job as failed and broadcast to WebSocket clients.
+   */
+  async markFailedWithBroadcast(
+    jobId: string,
+    errorMessage: string,
+    options: {
+      projectId: string;
+      jobType: JobType;
+      sentenceId?: string;
+    }
+  ): Promise<void> {
+    // Update database
+    await db.update(generationJobs)
+      .set({
+        status: 'failed',
+        errorMessage,
+        completedAt: new Date(),
+      })
+      .where(eq(generationJobs.id, jobId));
+
+    // Broadcast failure
+    broadcastJobFailed({
+      projectId: options.projectId,
+      jobId,
+      jobType: options.jobType,
+      sentenceId: options.sentenceId,
+      error: errorMessage,
+    });
   },
 };

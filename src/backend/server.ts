@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { createServer } from 'http';
 import { config } from 'dotenv';
 import { db } from './db/index.js';
 import { projectsRouter } from './api/projects.js';
@@ -8,6 +9,7 @@ import { healthRouter } from './api/health.js';
 import { scriptsRouter } from './api/scripts.js';
 import { inngestHandler } from './api/inngest.js';
 import { inngest } from './inngest/index.js';
+import { setupWebSocket, closeWebSocket, getTotalClients } from './websocket/index.js';
 
 // Load environment variables
 config();
@@ -100,8 +102,31 @@ app.use((req, res) => {
   });
 });
 
+// Create HTTP server and attach WebSocket
+const server = createServer(app);
+const wss = setupWebSocket(server);
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('\n[Server] SIGTERM received, shutting down gracefully...');
+  closeWebSocket();
+  server.close(() => {
+    console.log('[Server] HTTP server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('\n[Server] SIGINT received, shutting down gracefully...');
+  closeWebSocket();
+  server.close(() => {
+    console.log('[Server] HTTP server closed');
+    process.exit(0);
+  });
+});
+
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
@@ -110,6 +135,7 @@ app.listen(PORT, () => {
 ║   API:      http://localhost:${PORT}/api/v1                   ║
 ║   Health:   http://localhost:${PORT}/api/v1/health            ║
 ║   Inngest:  http://localhost:${PORT}/api/v1/inngest           ║
+║   WebSocket: ws://localhost:${PORT}/ws                        ║
 ║                                                            ║
 ║   Inngest Dev Server: ${INNGEST_DEV_SERVER}                  ║
 ║                                                            ║
@@ -121,4 +147,4 @@ app.listen(PORT, () => {
   `);
 });
 
-export { app, db, inngest };
+export { app, server, wss, db, inngest };
