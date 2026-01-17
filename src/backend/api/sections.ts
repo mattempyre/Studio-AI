@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { db, sections, sentences, projects } from '../db/index.js';
 import { eq, asc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import { createSectionSchema, updateSectionSchema } from '../validation/schemas.js';
+import { getDeepseekClient } from '../clients/deepseek.js';
 
 export const sectionsRouter = Router();
 
@@ -202,6 +204,197 @@ sectionsRouter.post('/reorder', async (req, res, next) => {
       message: 'Sections reordered successfully',
     });
   } catch (error) {
+    next(error);
+  }
+});
+
+// =============================================================================
+// AI Section Expansion
+// =============================================================================
+
+const aiExpandSchema = z.object({
+  mode: z.enum(['quick', 'guided']),
+  prompt: z.string().optional(),
+  sentenceCount: z.number().int().min(1).max(5).default(2),
+  insertAfterSentenceId: z.string().optional(), // null/undefined = end of section
+});
+
+/**
+ * POST /api/v1/sections/:id/ai-expand
+ * Generate new sentences for a section using AI.
+ * Supports quick (automatic) and guided (user-prompted) modes.
+ */
+sectionsRouter.post('/:id/ai-expand', async (req, res, next) => {
+  try {
+    const { id: sectionId } = req.params;
+
+    // Validate request body
+    const parsed = aiExpandSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => e.message).join(', '),
+        },
+      });
+    }
+
+    const { mode, prompt, sentenceCount, insertAfterSentenceId } = parsed.data;
+
+    // Verify section exists and get its data
+    const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Section not found' },
+      });
+    }
+
+    // Get the project for context
+    const project = await db.select().from(projects).where(eq(projects.id, section.projectId)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get existing sentences in this section
+    const existingSentences = await db
+      .select()
+      .from(sentences)
+      .where(eq(sentences.sectionId, sectionId))
+      .orderBy(asc(sentences.order));
+
+    const existingTexts = existingSentences.map(s => s.text);
+
+    // Determine insertion index
+    let insertAfterIndex: number | undefined;
+    if (insertAfterSentenceId) {
+      const targetIndex = existingSentences.findIndex(s => s.id === insertAfterSentenceId);
+      if (targetIndex !== -1) {
+        insertAfterIndex = targetIndex;
+      }
+    }
+
+    // Call Deepseek to generate sentences
+    const client = getDeepseekClient();
+    const result = await client.expandSection({
+      sectionTitle: section.title,
+      existingSentences: existingTexts,
+      projectTopic: project.topic || project.name || 'Untitled Project',
+      visualStyle: project.visualStyle || 'cinematic',
+      mode,
+      userPrompt: prompt,
+      sentenceCount,
+      insertAfterIndex,
+    });
+
+    // Return the generated sentences for preview (don't save yet)
+    res.json({
+      success: true,
+      data: {
+        sectionId,
+        sectionTitle: section.title,
+        generatedSentences: result.sentences,
+        insertPosition: insertAfterIndex !== undefined ? insertAfterIndex + 1 : existingSentences.length,
+      },
+    });
+  } catch (error) {
+    console.error('[AI Expand] Error:', error);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/sections/:id/ai-expand/accept
+ * Accept and save the generated sentences from AI expansion.
+ */
+sectionsRouter.post('/:id/ai-expand/accept', async (req, res, next) => {
+  try {
+    const { id: sectionId } = req.params;
+    const { generatedSentences, insertAfterSentenceId } = req.body;
+
+    if (!Array.isArray(generatedSentences) || generatedSentences.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'generatedSentences array is required',
+        },
+      });
+    }
+
+    // Verify section exists
+    const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Section not found' },
+      });
+    }
+
+    // Get existing sentences
+    const existingSentences = await db
+      .select()
+      .from(sentences)
+      .where(eq(sentences.sectionId, sectionId))
+      .orderBy(asc(sentences.order));
+
+    // Determine insertion point
+    let insertIndex = existingSentences.length;
+    if (insertAfterSentenceId) {
+      const targetIndex = existingSentences.findIndex(s => s.id === insertAfterSentenceId);
+      if (targetIndex !== -1) {
+        insertIndex = targetIndex + 1;
+      }
+    }
+
+    // Shift existing sentences that come after the insertion point
+    for (let i = insertIndex; i < existingSentences.length; i++) {
+      const sentence = existingSentences[i];
+      await db.update(sentences)
+        .set({ order: sentence.order + generatedSentences.length })
+        .where(eq(sentences.id, sentence.id));
+    }
+
+    // Insert the new sentences
+    const newSentences = [];
+    for (let i = 0; i < generatedSentences.length; i++) {
+      const gen = generatedSentences[i];
+      const newSentence = {
+        id: nanoid(),
+        sectionId,
+        text: gen.text,
+        order: insertIndex + i,
+        imagePrompt: gen.imagePrompt || null,
+        videoPrompt: gen.videoPrompt || null,
+        cameraMovement: 'static' as const,
+        motionStrength: 0.5,
+        status: 'pending' as const,
+        isAudioDirty: true,
+        isImageDirty: true,
+        isVideoDirty: true,
+      };
+
+      await db.insert(sentences).values(newSentence);
+      newSentences.push(newSentence);
+    }
+
+    // Update project's updatedAt
+    await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, section.projectId));
+
+    res.status(201).json({
+      success: true,
+      data: {
+        sectionId,
+        insertedCount: newSentences.length,
+        sentences: newSentences,
+      },
+    });
+  } catch (error) {
+    console.error('[AI Expand Accept] Error:', error);
     next(error);
   }
 });

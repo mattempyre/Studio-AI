@@ -33,7 +33,7 @@ export const updateSectionSchema = createSectionSchema.partial().omit({ projectI
 // Sentence validation schemas
 export const createSentenceSchema = z.object({
   sectionId: z.string().min(1, 'Section ID is required'),
-  text: z.string().min(1, 'Text is required'),
+  text: z.string(), // Allow empty text for placeholder sentences
   order: z.number().int().min(0, 'Order must be non-negative'),
   imagePrompt: z.string().optional(),
   videoPrompt: z.string().optional(),

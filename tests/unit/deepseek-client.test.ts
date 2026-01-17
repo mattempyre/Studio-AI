@@ -1191,4 +1191,259 @@ describe('Long-Form Script Generation', () => {
       expect(Array.isArray(topics)).toBe(true);
     });
   });
+
+  describe('expandSection', () => {
+    const validExpansionResponse = {
+      sentences: [
+        {
+          text: 'This is an expanded sentence about the topic.',
+          imagePrompt: 'A visual representation of the concept',
+          videoPrompt: 'Slow zoom into the scene',
+        },
+        {
+          text: 'Another sentence providing more detail.',
+          imagePrompt: 'Detailed close-up of relevant subject',
+          videoPrompt: 'Pan across the scene',
+        },
+      ],
+    };
+
+    it('should expand section in quick mode', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify(validExpansionResponse),
+              },
+            },
+          ],
+        }),
+      });
+
+      const result = await client.expandSection({
+        sectionTitle: 'Introduction to AI',
+        existingSentences: ['AI is transforming technology.'],
+        projectTopic: 'Artificial Intelligence',
+        visualStyle: 'cinematic',
+        mode: 'quick',
+        sentenceCount: 2,
+      });
+
+      expect(result.sentences).toHaveLength(2);
+      expect(result.sentences[0].text).toBe('This is an expanded sentence about the topic.');
+      expect(result.sentences[0].imagePrompt).toBeDefined();
+      expect(result.sentences[0].videoPrompt).toBeDefined();
+    });
+
+    it('should expand section in guided mode with user prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify(validExpansionResponse),
+              },
+            },
+          ],
+        }),
+      });
+
+      await client.expandSection({
+        sectionTitle: 'Machine Learning Basics',
+        existingSentences: ['Machine learning enables computers to learn.'],
+        projectTopic: 'Machine Learning',
+        visualStyle: 'educational',
+        mode: 'guided',
+        userPrompt: 'Add more detail about neural networks',
+        sentenceCount: 2,
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const userMessage = callBody.messages[1].content;
+
+      expect(userMessage).toContain('neural networks');
+    });
+
+    it('should respect insertAfterIndex parameter', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify(validExpansionResponse),
+              },
+            },
+          ],
+        }),
+      });
+
+      await client.expandSection({
+        sectionTitle: 'Test Section',
+        existingSentences: ['First sentence.', 'Second sentence.', 'Third sentence.'],
+        projectTopic: 'Test',
+        visualStyle: 'cinematic',
+        mode: 'quick',
+        sentenceCount: 1,
+        insertAfterIndex: 1,
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const userMessage = callBody.messages[1].content;
+
+      // Should mention the context around insert position
+      expect(userMessage).toContain('Second sentence');
+    });
+
+    it('should include visual style in system prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify(validExpansionResponse),
+              },
+            },
+          ],
+        }),
+      });
+
+      await client.expandSection({
+        sectionTitle: 'Test',
+        existingSentences: [],
+        projectTopic: 'Test',
+        visualStyle: 'anime',
+        mode: 'quick',
+        sentenceCount: 1,
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const systemMessage = callBody.messages[0].content;
+
+      expect(systemMessage).toContain('anime');
+    });
+
+    it('should throw error on invalid JSON response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'This is not valid JSON',
+              },
+            },
+          ],
+        }),
+      });
+
+      await expect(
+        client.expandSection({
+          sectionTitle: 'Test',
+          existingSentences: [],
+          projectTopic: 'Test',
+          visualStyle: 'cinematic',
+          mode: 'quick',
+          sentenceCount: 1,
+        })
+      ).rejects.toMatchObject({
+        code: 'PARSE_ERROR',
+      });
+    });
+
+    it('should throw error when sentences array is missing', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify({ notSentences: [] }),
+              },
+            },
+          ],
+        }),
+      });
+
+      await expect(
+        client.expandSection({
+          sectionTitle: 'Test',
+          existingSentences: [],
+          projectTopic: 'Test',
+          visualStyle: 'cinematic',
+          mode: 'quick',
+          sentenceCount: 1,
+        })
+      ).rejects.toMatchObject({
+        code: 'PARSE_ERROR',
+      });
+    });
+
+    it('should handle empty existing sentences', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify(validExpansionResponse),
+              },
+            },
+          ],
+        }),
+      });
+
+      const result = await client.expandSection({
+        sectionTitle: 'New Section',
+        existingSentences: [],
+        projectTopic: 'Test Topic',
+        visualStyle: 'cinematic',
+        mode: 'quick',
+        sentenceCount: 2,
+      });
+
+      expect(result.sentences).toHaveLength(2);
+    });
+
+    it('should request the correct number of sentences', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify(validExpansionResponse),
+              },
+            },
+          ],
+        }),
+      });
+
+      await client.expandSection({
+        sectionTitle: 'Test',
+        existingSentences: [],
+        projectTopic: 'Test',
+        visualStyle: 'cinematic',
+        mode: 'quick',
+        sentenceCount: 5,
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const userMessage = callBody.messages[1].content;
+
+      expect(userMessage).toContain('5');
+    });
+  });
 });

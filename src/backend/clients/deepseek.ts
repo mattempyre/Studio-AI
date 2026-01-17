@@ -88,6 +88,28 @@ export interface GeneratedScript {
   estimatedDurationMinutes: number;
 }
 
+// Section expansion types (AI-assisted sentence generation)
+export interface SectionExpansionOptions {
+  sectionTitle: string;
+  existingSentences: string[];
+  projectTopic: string;
+  visualStyle: string;
+  mode: 'quick' | 'guided';
+  userPrompt?: string;
+  sentenceCount: number;
+  insertAfterIndex?: number; // -1 or undefined = end of section
+}
+
+export interface ExpandedSentence {
+  text: string;
+  imagePrompt: string;
+  videoPrompt: string;
+}
+
+export interface SectionExpansionResult {
+  sentences: ExpandedSentence[];
+}
+
 interface DeepseekMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -727,7 +749,7 @@ Remember to output ONLY valid JSON matching the required format. Do not include 
     try {
       const response = await fetch(url, {
         ...options,
-        signal: AbortSignal.timeout(60000), // 60 second timeout
+        signal: AbortSignal.timeout(120000), // 120 second timeout for long script generation
       });
 
       if (response.status === 429) {
@@ -775,6 +797,148 @@ Remember to output ONLY valid JSON matching the required format. Do not include 
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Expand a section by generating additional sentences using AI
+   * Supports both quick (automatic) and guided (user-prompted) modes
+   */
+  async expandSection(options: SectionExpansionOptions): Promise<SectionExpansionResult> {
+    const {
+      sectionTitle,
+      existingSentences,
+      projectTopic,
+      visualStyle,
+      mode,
+      userPrompt,
+      sentenceCount,
+      insertAfterIndex,
+    } = options;
+
+    // Build context about where we're inserting
+    const insertPosition = insertAfterIndex !== undefined && insertAfterIndex >= 0
+      ? `after sentence ${insertAfterIndex + 1}`
+      : 'at the end of the section';
+
+    // Get surrounding context for better continuity
+    const previousSentence = insertAfterIndex !== undefined && insertAfterIndex >= 0
+      ? existingSentences[insertAfterIndex]
+      : existingSentences[existingSentences.length - 1];
+
+    const nextSentence = insertAfterIndex !== undefined && insertAfterIndex >= 0 && insertAfterIndex < existingSentences.length - 1
+      ? existingSentences[insertAfterIndex + 1]
+      : undefined;
+
+    const systemPrompt = `You are a professional script writer creating narration for educational/documentary videos.
+You will be given context about an existing script section and must generate ${sentenceCount} new sentence(s) that flow naturally.
+
+IMPORTANT RULES:
+1. Each sentence should be narration text - spoken by a narrator
+2. Sentences should be 15-30 words each for good pacing
+3. Maintain the same tone and style as existing sentences
+4. Create smooth transitions with surrounding content
+5. For each sentence, also create image and video prompts for ${visualStyle} visual style
+
+You MUST respond with valid JSON in this exact format:
+{
+  "sentences": [
+    {
+      "text": "The narration sentence...",
+      "imagePrompt": "A ${visualStyle} shot of...",
+      "videoPrompt": "Camera slowly..."
+    }
+  ]
+}`;
+
+    let userContent: string;
+
+    if (mode === 'guided' && userPrompt) {
+      userContent = `PROJECT TOPIC: ${projectTopic}
+
+SECTION: "${sectionTitle}"
+
+EXISTING SENTENCES IN THIS SECTION:
+${existingSentences.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+INSERTION POINT: ${insertPosition}
+${previousSentence ? `PREVIOUS SENTENCE: "${previousSentence}"` : ''}
+${nextSentence ? `NEXT SENTENCE: "${nextSentence}"` : ''}
+
+USER INSTRUCTION: ${userPrompt}
+
+Generate ${sentenceCount} sentence(s) following the user's instruction while maintaining flow with the existing content.`;
+    } else {
+      // Quick mode - automatic expansion
+      userContent = `PROJECT TOPIC: ${projectTopic}
+
+SECTION: "${sectionTitle}"
+
+EXISTING SENTENCES IN THIS SECTION:
+${existingSentences.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+INSERTION POINT: ${insertPosition}
+${previousSentence ? `PREVIOUS SENTENCE: "${previousSentence}"` : ''}
+${nextSentence ? `NEXT SENTENCE: "${nextSentence}"` : ''}
+
+Generate ${sentenceCount} sentence(s) that naturally continue or expand on the section's content.
+- Add more detail, examples, or explanations that fit the section's theme
+- Ensure smooth transitions with surrounding sentences
+- Maintain the educational/informative tone`;
+    }
+
+    const response = await this.chat([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent },
+    ]);
+
+    // Parse the response
+    return this.parseExpansionResponse(response);
+  }
+
+  /**
+   * Parse the expansion response into structured sentences
+   */
+  private parseExpansionResponse(content: string): SectionExpansionResult {
+    try {
+      // Try to extract JSON from the response
+      let jsonContent = content;
+
+      // Handle markdown code blocks
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        jsonContent = jsonMatch[1].trim();
+      }
+
+      const parsed = JSON.parse(jsonContent);
+
+      if (!parsed.sentences || !Array.isArray(parsed.sentences)) {
+        throw new DeepseekError('Invalid expansion response: missing sentences array', 'PARSE_ERROR');
+      }
+
+      const sentences: ExpandedSentence[] = parsed.sentences.map((s: Record<string, unknown>, index: number) => {
+        if (!s.text || typeof s.text !== 'string') {
+          throw new DeepseekError(`Invalid sentence at index ${index}: missing text`, 'PARSE_ERROR');
+        }
+
+        return {
+          text: s.text,
+          imagePrompt: (s.imagePrompt as string) || '',
+          videoPrompt: (s.videoPrompt as string) || '',
+        };
+      });
+
+      return { sentences };
+    } catch (error) {
+      if (error instanceof DeepseekError) {
+        throw error;
+      }
+
+      throw new DeepseekError(
+        `Failed to parse expansion response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'PARSE_ERROR',
+        { content: content.substring(0, 500) }
+      );
+    }
   }
 }
 
