@@ -1,0 +1,118 @@
+# generated: 2026-01-18
+# project: Studio-AI
+# project_key: videogen-ai-studio
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-01-18
+project: Studio-AI
+project_key: videogen-ai-studio
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # EPIC-00: Infrastructure (STORY-001 to STORY-007)
+  epic-0: done
+  0-1-project-setup-database-schema: done
+  0-2-inngest-job-queue-integration: done
+  0-3-comfyui-client-integration: done
+  0-4-chatterbox-tts-client-integration: done
+  0-5-deepseek-api-client-integration: done
+  0-6-long-form-script-generation: done
+  0-7-websocket-progress-server: done
+  epic-0-retrospective: optional
+
+  # EPIC-01: Script Management (STORY-008 to STORY-010)
+  epic-1: done
+  1-1-project-crud-api: done
+  1-2-ai-script-generation: done
+  1-3-script-editor-component: done
+  epic-1-retrospective: optional
+
+  # EPIC-02: Character System (STORY-011 to STORY-013)
+  epic-2: done
+  2-1-character-library-crud: done
+  2-2-character-library-ui: done
+  2-3-project-cast-management: done
+  epic-2-retrospective: optional
+
+  # EPIC-03: Voice Generation (STORY-014 to STORY-016)
+  epic-3: in-progress
+  3-1-audio-generation-job: done
+  3-2-voice-selection-ui: done
+  3-3-bulk-audio-generation: ready-for-dev
+  epic-3-retrospective: optional
+
+  # EPIC-04: Image Generation
+  epic-4: backlog
+  4-1-image-prompt-generation: ready-for-dev
+  4-2-image-generation-job: ready-for-dev
+  4-3-image-regeneration-override: ready-for-dev
+  epic-4-retrospective: optional
+
+  # EPIC-05: Video Generation
+  epic-5: backlog
+  5-1-video-generation-job: ready-for-dev
+  5-2-camera-movement-controls: ready-for-dev
+  5-3-video-regeneration-override: ready-for-dev
+  epic-5-retrospective: optional
+
+  # EPIC-06: Storyboard UI
+  epic-6: backlog
+  6-1-storyboard-table-view: ready-for-dev
+  6-2-storyboard-grid-view: ready-for-dev
+  6-3-scene-inspector-panel: ready-for-dev
+  6-4-section-navigation-sidebar: ready-for-dev
+  6-5-bulk-scene-generation: ready-for-dev
+  epic-6-retrospective: optional
+
+  # EPIC-07: Export System
+  epic-7: backlog
+  7-1-export-service: ready-for-dev
+  7-2-export-ui-download: ready-for-dev
+  7-3-export-metadata: ready-for-dev
+  epic-7-retrospective: optional
+
+  # EPIC-08: Cascading Regeneration
+  epic-8: backlog
+  8-1-dependency-tracking: ready-for-dev
+  8-2-sentence-edit-regeneration: ready-for-dev
+  8-3-prompt-edit-regeneration: ready-for-dev
+  epic-8-retrospective: optional
+
+  # EPIC-09: Polish & Integration
+  epic-9: backlog
+  9-1-progress-dashboard: ready-for-dev
+  9-2-error-handling-retry-ui: ready-for-dev
+  9-3-project-dashboard: ready-for-dev
+  9-4-global-project-dropdown: ready-for-dev
+  epic-9-retrospective: optional

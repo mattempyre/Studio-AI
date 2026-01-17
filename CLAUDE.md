@@ -121,6 +121,42 @@ The `jobService` tracks job status in the `generation_jobs` table with states: `
 
 **Inngest Steps:** Use `step.run()` for durable execution - each step is retryable and persisted.
 
+## Feature Implementation Guidelines
+
+**Component Organization:**
+- Keep TSX files under 300 lines - if a file exceeds this, extract sub-components
+- Create a folder for complex components (e.g., `CharacterLibrary/`, `ScriptEditorV2/`)
+- Follow the existing pattern: main component + sub-components in the same folder
+
+**File Structure for Complex Components:**
+```
+components/
+  FeatureName/
+    FeatureName.tsx      # Main component, orchestrates sub-components
+    SubComponentA.tsx    # Focused, single-responsibility component
+    SubComponentB.tsx    # Another sub-component
+    index.ts             # Re-exports main component
+    types.ts             # Feature-specific types (if needed)
+    hooks.ts             # Feature-specific hooks (if needed)
+```
+
+**Extraction Signals:**
+- File exceeds 300 lines
+- Component has multiple distinct UI sections
+- Logic can be isolated into a custom hook
+- A section is reused or could be tested independently
+
+**What to Extract:**
+- Modal dialogs → separate component
+- List items with complex rendering → separate component
+- Form sections → separate component
+- Reusable UI patterns → shared component in `components/`
+- Complex state logic → custom hook in same folder
+
+**Existing Examples:**
+- `CharacterLibrary/` - Grid, Card, Modal, DeleteConfirmation as separate files
+- `ScriptEditorV2/` - Header, Sidebar, SectionCard, SentenceRow as separate files
+
 ## Type Definitions
 
 Core types in `types.ts`:
