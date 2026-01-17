@@ -109,7 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           <div
             onClick={handleCreateProject}
-            className="group relative overflow-hidden bg-primary p-[1px] rounded-xl cursor-pointer hover:shadow-[0_0_20px_rgba(234,40,49,0.3)] transition-all duration-300"
+            className="group relative overflow-hidden bg-primary p-[1px] rounded-xl cursor-pointer hover:shadow-glow transition-all duration-300"
           >
             <div className="bg-background-dark h-full w-full rounded-xl p-6 flex flex-col justify-between relative z-10">
               <div>
@@ -171,15 +171,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                 onClick={() => handleSelectProject(proj.id)}
                 className="group cursor-pointer bg-card-bg border border-border-color hover:border-primary/50 rounded-xl overflow-hidden transition-all duration-300"
               >
-                <div className="h-40 bg-black relative">
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-purple-500/20">
-                    <Icons.Film className="text-white/30" size={40} />
+                <div className="h-40 bg-surface-0 relative">
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface-2 to-surface-3">
+                    <Icons.Film className="text-text-muted/50" size={40} />
                   </div>
                   <div className="absolute top-2 right-2">
                     <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                      proj.status === 'completed' ? 'bg-green-500/20 text-green-500 border border-green-500/30' :
-                      proj.status === 'generating' ? 'bg-blue-500/20 text-blue-500 border border-blue-500/30' :
-                      'bg-white/10 text-text-muted border border-white/20'
+                      proj.status === 'completed' ? 'bg-success/20 text-success border border-success/30' :
+                      proj.status === 'generating' ? 'bg-info/20 text-info border border-info/30' :
+                      'bg-surface-3 text-text-secondary border border-border-subtle'
                     }`}>
                       {proj.status}
                     </span>

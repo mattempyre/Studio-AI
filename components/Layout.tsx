@@ -225,17 +225,17 @@ const Layout: React.FC<LayoutProps> = ({
 
           {/* Credits */}
           <div className="mt-auto pt-4 border-t border-white/5 hidden lg:block">
-            <div className="bg-[#1e1933] p-4 rounded-xl border border-white/5">
+            <div className="bg-surface-2 p-4 rounded-xl border border-border-subtle">
               <p className="text-[10px] text-text-muted mb-2 uppercase tracking-wider font-bold flex justify-between">
                 Rendering Credits <span>120m</span>
               </p>
-              <div className="w-full bg-black h-1.5 rounded-full overflow-hidden">
-                <div className="bg-gradient-to-r from-primary to-orange-500 h-full w-2/3"></div>
+              <div className="w-full bg-surface-0 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-gradient-to-r from-primary to-primary-hover h-full w-2/3"></div>
               </div>
             </div>
             <button
               onClick={onLogout}
-              className="flex items-center gap-3 px-4 py-3 mt-2 rounded-xl text-text-muted hover:bg-red-500/10 hover:text-red-500 cursor-pointer transition-all w-full"
+              className="flex items-center gap-3 px-4 py-3 mt-2 rounded-xl text-text-muted hover:bg-error/10 hover:text-error cursor-pointer transition-all w-full"
             >
               <Icons.LogOut size={20} />
               <p className="text-sm font-medium">Sign Out</p>
@@ -320,7 +320,7 @@ const Layout: React.FC<LayoutProps> = ({
                 <div className="relative group w-64 hidden md:block">
                     <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-white transition-colors" size={18} />
                     <input
-                      className="w-full bg-[#1e1933] border border-transparent rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder:text-text-muted focus:ring-1 focus:ring-primary focus:bg-[#1e1933] transition-all"
+                      className="w-full bg-surface-2 border border-border-subtle rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder:text-text-muted focus:ring-1 focus:ring-primary focus:bg-surface-3 transition-all"
                       placeholder="Search..."
                       type="text"
                     />
@@ -360,7 +360,7 @@ const Layout: React.FC<LayoutProps> = ({
           <div className="flex items-center gap-6 ml-auto z-10">
             <button
               onClick={handleDynamicButtonClick}
-              className="hidden md:flex items-center gap-2 bg-gradient-to-r from-primary to-red-600 hover:opacity-90 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-lg shadow-primary/20"
+              className="hidden md:flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-glow-sm"
             >
               {buttonConfig.icon && <buttonConfig.icon size={16} />}
               {buttonConfig.text}

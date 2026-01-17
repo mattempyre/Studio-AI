@@ -12,25 +12,58 @@
         theme: {
           extend: {
             colors: {
-              // DaVinci Resolve inspired palette
-              primary: "#e87400",           // Orange accent (DaVinci's selection color)
-              "primary-dark": "#cc6600",    // Darker orange for hover states
-              "primary-light": "#ff8c1a",   // Lighter orange for highlights
-              "background-dark": "#1a1a1a", // Near-black background
-              "panel-bg": "#242424",        // Panel backgrounds
-              "card-bg": "#2d2d2d",         // Card backgrounds
-              "border-color": "#3a3a3a",    // Subtle borders
-              "text-muted": "#888888",      // Muted text
-              "text-secondary": "#b0b0b0",  // Secondary text
-              // Accent colors for timeline/visual elements
-              "accent-teal": "#3d8b8b",     // Teal (like DaVinci timeline)
-              "accent-green": "#5a8a5a",    // Muted green
-              "accent-blue": "#4a7a9a",     // Steel blue
-              "accent-purple": "#6a5a8a",   // Muted purple
+              // Premium Dark Theme - Cohesive Professional Palette
+              // Based on Material Design dark theme principles + DaVinci Resolve aesthetics
+
+              // Primary accent - desaturated amber/orange (less harsh than pure orange)
+              primary: "#d4840a",           // Warm amber - premium feel, less saturated
+              "primary-hover": "#e8940b",   // Slightly brighter for hover
+              "primary-muted": "#b87308",   // Darker for subtle accents
+
+              // Surface elevation system (Material Design inspired)
+              // Each level is slightly lighter to show depth
+              "surface-0": "#121212",       // Lowest level - base background
+              "surface-1": "#1e1e1e",       // Elevation 1 - sidebar, panels
+              "surface-2": "#252525",       // Elevation 2 - cards, dropdowns
+              "surface-3": "#2c2c2c",       // Elevation 3 - hover states, modals
+              "surface-4": "#333333",       // Elevation 4 - active states
+
+              // Legacy aliases for existing components
+              "background-dark": "#121212",
+              "panel-bg": "#1e1e1e",
+              "card-bg": "#252525",
+
+              // Borders - subtle, consistent
+              "border-subtle": "#2a2a2a",   // Very subtle separation
+              "border-color": "#363636",    // Default borders
+              "border-strong": "#454545",   // Emphasized borders
+
+              // Text hierarchy - soft whites (never pure white on dark)
+              "text-primary": "#e8e8e8",    // Primary text - 91% brightness
+              "text-secondary": "#a0a0a0",  // Secondary text - 63% brightness
+              "text-muted": "#6b6b6b",      // Muted/disabled - 42% brightness
+              "text-inverse": "#121212",    // Text on light backgrounds
+
+              // Semantic colors - desaturated for dark mode (~20% less saturation)
+              "success": "#4a9f6e",         // Muted green
+              "warning": "#c9973d",         // Muted amber
+              "error": "#c75555",           // Muted red
+              "info": "#5a8ab4",            // Muted blue
+
+              // Timeline/media accent colors (for visual variety in editor)
+              "accent-teal": "#3d7a7a",     // Audio tracks
+              "accent-blue": "#4a6d8a",     // Video tracks
+              "accent-violet": "#6a5a80",   // Effects
+              "accent-rose": "#8a5a6a",     // Markers
             },
             fontFamily: {
               display: ['"Space Grotesk"', 'sans-serif'],
               sans: ['"Noto Sans"', 'sans-serif'],
+            },
+            boxShadow: {
+              // Subtle glow for elevated elements (shadows don't work well on dark)
+              'glow': '0 0 20px rgba(212, 132, 10, 0.15)',
+              'glow-sm': '0 0 10px rgba(212, 132, 10, 0.1)',
             }
           }
         }
@@ -38,27 +71,33 @@
     </script>
     <style>
       body {
-        background-color: #1a1a1a;
-        color: #e0e0e0;
+        background-color: #121212;
+        color: #e8e8e8;
       }
-      /* DaVinci-style Scrollbar */
+      /* Premium Scrollbar */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #1a1a1a;
+        background: #121212;
       }
       ::-webkit-scrollbar-thumb {
-        background: #3a3a3a;
+        background: #363636;
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #4a4a4a;
+        background: #454545;
       }
-      /* Selection color */
+      /* Selection with primary color */
       ::selection {
-        background: rgba(232, 116, 0, 0.3);
+        background: rgba(212, 132, 10, 0.35);
+      }
+      /* Smooth color transitions */
+      * {
+        transition-property: background-color, border-color, color, fill, stroke;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        transition-duration: 150ms;
       }
     </style>
   <script type="importmap">
