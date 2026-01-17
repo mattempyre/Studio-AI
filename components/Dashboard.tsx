@@ -1,7 +1,8 @@
 import React from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { MOCK_TEMPLATES } from '../constants';
 import * as Icons from './Icons';
-import { ViewState, User } from '../types';
+import { User } from '../types';
 
 // Dashboard project type from backend
 interface DashboardProject {
@@ -21,9 +22,7 @@ interface DashboardProps {
   user: User;
   projects: DashboardProject[];
   isLoading?: boolean;
-  onNavigate: (view: ViewState) => void;
-  onSelectProject: (projectId: string) => void;
-  onCreateProject: () => void;
+  onCreateProject: () => string; // Returns new project ID
   onRefresh?: () => void;
 }
 
@@ -31,11 +30,26 @@ const Dashboard: React.FC<DashboardProps> = ({
   user,
   projects,
   isLoading = false,
-  onNavigate,
-  onSelectProject,
   onCreateProject,
   onRefresh
 }) => {
+  const navigate = useNavigate();
+
+  const handleCreateProject = () => {
+    const newProjectId = onCreateProject();
+    navigate({
+      to: '/project/$projectId/script',
+      params: { projectId: newProjectId }
+    });
+  };
+
+  const handleSelectProject = (projectId: string) => {
+    navigate({
+      to: '/project/$projectId/script',
+      params: { projectId }
+    });
+  };
+
   const formatDate = (date: Date | null) => {
     if (!date) return 'Never';
     const d = new Date(date);
@@ -69,7 +83,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div
-            onClick={onCreateProject}
+            onClick={handleCreateProject}
             className="group bg-card-bg/50 border border-border-color hover:border-primary/50 rounded-xl p-6 cursor-pointer transition-all duration-300"
           >
             <div className="flex flex-col h-full justify-between">
@@ -87,7 +101,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           <div
-            onClick={onCreateProject}
+            onClick={handleCreateProject}
             className="group relative overflow-hidden bg-primary p-[1px] rounded-xl cursor-pointer hover:shadow-[0_0_20px_rgba(234,40,49,0.3)] transition-all duration-300"
           >
             <div className="bg-background-dark h-full w-full rounded-xl p-6 flex flex-col justify-between relative z-10">
@@ -136,7 +150,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <Icons.FolderOpen className="mx-auto text-text-muted mb-4" size={40} />
             <p className="text-text-muted mb-4">No projects yet. Start creating!</p>
             <button
-              onClick={onCreateProject}
+              onClick={handleCreateProject}
               className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors"
             >
               Create Your First Project
@@ -147,7 +161,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             {projects.map((proj) => (
               <div
                 key={proj.id}
-                onClick={() => onSelectProject(proj.id)}
+                onClick={() => handleSelectProject(proj.id)}
                 className="group cursor-pointer bg-card-bg border border-border-color hover:border-primary/50 rounded-xl overflow-hidden transition-all duration-300"
               >
                 <div className="h-40 bg-black relative">

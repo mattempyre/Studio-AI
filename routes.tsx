@@ -71,10 +71,24 @@ function DashboardPage() {
 
   if (!user) return null;
 
+  // Transform frontend Project[] to Dashboard's expected format
+  const dashboardProjects = projects.map(p => ({
+    id: p.id,
+    name: p.name,
+    topic: null,
+    targetDuration: 5,
+    visualStyle: p.visualStyle || 'Cinematic',
+    status: p.status,
+    sectionCount: p.script?.length || 0,
+    sentenceCount: p.scenes?.length || 0,
+    createdAt: p.createdAt ? new Date(p.createdAt) : null,
+    updatedAt: p.lastEdited ? new Date(p.lastEdited) : null,
+  }));
+
   return (
     <Dashboard
       user={user}
-      projects={projects}
+      projects={dashboardProjects}
       onCreateProject={handleCreateProject}
     />
   );
