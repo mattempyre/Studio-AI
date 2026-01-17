@@ -44,6 +44,11 @@ drizzle/
 # Test coverage
 coverage/
 
+# Playwright
+playwright-report/
+test-results/
+playwright/.cache/
+
 # Local config (user-specific)
 .bmad/
 .claude/
