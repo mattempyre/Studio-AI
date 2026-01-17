@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Project, Character, Voice, User } from '../types';
 import { INITIAL_PROJECT } from '../constants';
+import { projectsApi } from '../services/backendApi';
 
 // Initial library data
 const INITIAL_LIBRARY: Character[] = [
@@ -24,6 +25,12 @@ const INITIAL_LIBRARY: Character[] = [
   }
 ];
 
+// Layout projects (simplified for sidebar dropdown)
+interface LayoutProject {
+  id: string;
+  name: string;
+}
+
 interface AppContextType {
   // Auth
   user: User | null;
@@ -32,6 +39,10 @@ interface AppContextType {
   // Projects
   projects: Project[];
   setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+
+  // Layout projects (for sidebar dropdown - synced with backend)
+  layoutProjects: LayoutProject[];
+  refreshLayoutProjects: () => Promise<void>;
 
   // Characters
   libraryCharacters: Character[];
@@ -43,10 +54,12 @@ interface AppContextType {
 
   // Handlers
   handleProjectUpdate: (updatedProject: Project) => void;
+  handleLayoutProjectUpdate: (id: string, updates: { name: string }) => Promise<void>;
   handleAddCharacterToLibrary: (character: Character) => void;
   handleUpdateLibraryCharacter: (updatedChar: Character) => void;
   handleAddClonedVoice: (voice: Voice) => void;
   handleCreateProject: () => string; // Returns new project ID
+  handleCreateLayoutProject: () => Promise<string>; // Returns new project ID (async)
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -75,13 +88,57 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   // Projects State
   const [projects, setProjects] = useState<Project[]>([INITIAL_PROJECT]);
 
+  // Layout projects (for sidebar dropdown - synced with backend)
+  const [layoutProjects, setLayoutProjects] = useState<LayoutProject[]>([]);
+
   // Workspace Level State
   const [libraryCharacters, setLibraryCharacters] = useState<Character[]>(INITIAL_LIBRARY);
   const [clonedVoices, setClonedVoices] = useState<Voice[]>([]);
 
+  // Fetch layout projects from backend
+  const refreshLayoutProjects = useCallback(async () => {
+    try {
+      const result = await projectsApi.list();
+      setLayoutProjects(result.projects.map(p => ({ id: p.id, name: p.name })));
+    } catch (error) {
+      console.error('Failed to load projects for layout:', error);
+    }
+  }, []);
+
+  // Load layout projects on mount
+  useEffect(() => {
+    refreshLayoutProjects();
+  }, [refreshLayoutProjects]);
+
   // Handlers
   const handleProjectUpdate = (updatedProject: Project) => {
     setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+  };
+
+  // Update a project name via API and refresh layout projects
+  const handleLayoutProjectUpdate = async (id: string, updates: { name: string }) => {
+    try {
+      await projectsApi.update(id, updates);
+      await refreshLayoutProjects();
+    } catch (error) {
+      console.error('Failed to update project:', error);
+    }
+  };
+
+  // Create a project via API and refresh layout projects
+  const handleCreateLayoutProject = async (): Promise<string> => {
+    try {
+      const newProject = await projectsApi.create({
+        name: 'Untitled Project',
+        targetDuration: 8,
+        visualStyle: 'cinematic',
+      });
+      await refreshLayoutProjects();
+      return newProject.id;
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      return `proj_${Date.now()}`;
+    }
   };
 
   const handleAddCharacterToLibrary = (character: Character) => {
@@ -135,15 +192,19 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     setUser,
     projects,
     setProjects,
+    layoutProjects,
+    refreshLayoutProjects,
     libraryCharacters,
     setLibraryCharacters,
     clonedVoices,
     setClonedVoices,
     handleProjectUpdate,
+    handleLayoutProjectUpdate,
     handleAddCharacterToLibrary,
     handleUpdateLibraryCharacter,
     handleAddClonedVoice,
     handleCreateProject,
+    handleCreateLayoutProject,
   };
 
   return (

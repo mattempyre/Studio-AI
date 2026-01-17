@@ -23,6 +23,59 @@ const truncateName = (name: string): string => {
   return name.slice(0, MAX_NAME_LENGTH) + '...';
 };
 
+// Scrolling text component for truncated names
+interface ScrollingTextProps {
+  text: string;
+  maxLength: number;
+  className?: string;
+}
+
+const ScrollingText: React.FC<ScrollingTextProps> = ({ text, maxLength, className = '' }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [shouldScroll, setShouldScroll] = useState(false);
+  const [scrollDistance, setScrollDistance] = useState(0);
+
+  useEffect(() => {
+    if (isHovered && containerRef.current && textRef.current) {
+      const containerWidth = containerRef.current.offsetWidth;
+      const textWidth = textRef.current.scrollWidth;
+      if (textWidth > containerWidth) {
+        setShouldScroll(true);
+        setScrollDistance(textWidth - containerWidth + 16); // 16px extra padding
+      } else {
+        setShouldScroll(false);
+      }
+    }
+  }, [isHovered, text]);
+
+  const displayText = isHovered ? text : truncateName(text);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`overflow-hidden ${className}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      title={text}
+    >
+      <span
+        ref={textRef}
+        className="inline-block whitespace-nowrap transition-transform"
+        style={{
+          transform: isHovered && shouldScroll ? `translateX(-${scrollDistance}px)` : 'translateX(0)',
+          transition: isHovered && shouldScroll
+            ? `transform ${Math.max(scrollDistance * 20, 1500)}ms linear`
+            : 'transform 0.2s ease-out',
+        }}
+      >
+        {displayText}
+      </span>
+    </div>
+  );
+};
+
 const ProjectDropdown: React.FC<ProjectDropdownProps> = ({
   projects,
   activeProjectId,
@@ -201,12 +254,17 @@ const ProjectDropdown: React.FC<ProjectDropdownProps> = ({
           />
         ) : (
           <>
-            <span
-              className="text-sm font-medium text-white truncate"
-              title={activeProject?.name || 'Select a project...'}
-            >
-              {activeProject ? truncateName(activeProject.name) : 'Select a project...'}
-            </span>
+            {activeProject ? (
+              <ScrollingText
+                text={activeProject.name}
+                maxLength={MAX_NAME_LENGTH}
+                className="text-sm font-medium text-white flex-1 min-w-0"
+              />
+            ) : (
+              <span className="text-sm font-medium text-white truncate">
+                Select a project...
+              </span>
+            )}
             <div className="flex items-center gap-1.5 shrink-0">
               {activeProject && (
                 <button
@@ -253,9 +311,11 @@ const ProjectDropdown: React.FC<ProjectDropdownProps> = ({
                 ) : (
                   <span className="w-3.5 shrink-0" />
                 )}
-                <span className="truncate" title={project.name}>
-                  {project.name}
-                </span>
+                <ScrollingText
+                  text={project.name}
+                  maxLength={MAX_NAME_LENGTH}
+                  className="flex-1 min-w-0"
+                />
               </li>
             ))
           )}

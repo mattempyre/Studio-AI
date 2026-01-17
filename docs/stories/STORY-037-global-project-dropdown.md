@@ -464,8 +464,19 @@ This component should follow the existing design patterns in the codebase:
 
 **Status History:**
 - 2026-01-17: Created by Scrum Master (Claude)
+- 2026-01-17: Implementation started
+- 2026-01-17: Code complete, 31 tests passing
+- 2026-01-17: Pushed to feature/STORY-037-global-project-dropdown
 
-**Actual Effort:** TBD
+**Actual Effort:** 5 points (matched estimate)
+
+**Implementation Notes:**
+- Created new ProjectDropdown component in components/Sidebar/
+- Moved dropdown from header to sidebar between global and project nav
+- Implemented inline rename with Enter/Escape/blur save behavior
+- Added collapsed sidebar support with folder icon and indicator dot
+- Added TanStack Router mock helper for component tests
+- Test coverage: 31 unit tests covering all functionality
 
 ---
 

@@ -99,6 +99,8 @@ class ScriptEditorErrorBoundary extends Component<ErrorBoundaryProps, ErrorBound
 
 interface ScriptEditorV2Props {
   projectId: string;
+  projectName?: string; // Optional override from parent for real-time sync
+  onUpdateProjectName?: () => Promise<void>; // Callback to refresh layout projects after name change
   libraryCharacters: Character[];
   clonedVoices: Voice[];
   onNext: () => void;
@@ -152,7 +154,7 @@ const DirtyIndicator: React.FC<{ isAudioDirty: boolean; isImageDirty: boolean; i
         <span className="size-1.5 rounded-full bg-orange-400" title="Audio needs regeneration" />
       )}
       {isImageDirty && (
-        <span className="size-1.5 rounded-full bg-purple-400" title="Image needs regeneration" />
+        <span className="size-1.5 rounded-full bg-warning" title="Image needs regeneration" />
       )}
       {isVideoDirty && (
         <span className="size-1.5 rounded-full bg-pink-400" title="Video needs regeneration" />
@@ -428,7 +430,7 @@ const ConfirmModal: React.FC<{
       />
 
       {/* Modal */}
-      <div className="relative bg-[#1a1625] border border-white/10 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+      <div className="relative bg-surface-2 border border-border-color rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
         <div className="flex items-center gap-3 mb-4">
           <div className={`p-2 rounded-full ${danger ? 'bg-red-500/20' : 'bg-primary/20'}`}>
             <Icons.AlertTriangle className={danger ? 'text-red-400' : 'text-primary'} size={20} />
@@ -726,6 +728,8 @@ const SectionCard: React.FC<{
 // Main ScriptEditorV2 Component
 const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   projectId,
+  projectName,
+  onUpdateProjectName,
   libraryCharacters,
   clonedVoices,
   onNext,
@@ -753,6 +757,11 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     message: string;
     onConfirm: () => void;
   } | null>(null);
+
+  // Project name editing state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // AI Expansion state
   const [aiExpandSection, setAiExpandSection] = useState<BackendSection | null>(null);
@@ -798,6 +807,54 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   useEffect(() => {
     loadProject();
   }, [loadProject]);
+
+  // Focus name input when editing starts
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  // Project name editing handlers
+  const displayName = projectName || project?.name || '';
+
+  const startEditingName = () => {
+    setEditNameValue(displayName);
+    setIsEditingName(true);
+  };
+
+  const saveNameEdit = async () => {
+    const trimmedName = editNameValue.trim();
+    if (trimmedName && project) {
+      try {
+        // Update backend
+        await projectsApi.update(project.id, { name: trimmedName });
+        // Update local state
+        setProject({ ...project, name: trimmedName });
+        // Refresh layout projects to sync sidebar
+        if (onUpdateProjectName) {
+          await onUpdateProjectName();
+        }
+      } catch (err) {
+        console.error('Failed to update project name:', err);
+      }
+    }
+    setIsEditingName(false);
+  };
+
+  const cancelNameEdit = () => {
+    setIsEditingName(false);
+    setEditNameValue(displayName);
+  };
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      saveNameEdit();
+    } else if (e.key === 'Escape') {
+      cancelNameEdit();
+    }
+  };
 
   // Sync project settings to local state when project loads
   useEffect(() => {
@@ -1247,8 +1304,39 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
       {/* Header */}
       <div className="px-8 py-6 border-b border-border-color bg-background-dark/60">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white">{project.name}</h1>
+          <div className="group">
+            {isEditingName ? (
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={editNameValue}
+                onChange={(e) => setEditNameValue(e.target.value)}
+                onKeyDown={handleNameKeyDown}
+                onBlur={saveNameEdit}
+                className="text-xl font-bold text-white bg-transparent border-b border-primary focus:outline-none w-full"
+                aria-label="Project name"
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <h1
+                  className="text-xl font-bold text-white cursor-pointer hover:text-primary transition-colors"
+                  onClick={startEditingName}
+                  title="Click to edit project name"
+                >
+                  {displayName}
+                </h1>
+                {onUpdateProjectName && (
+                  <button
+                    onClick={startEditingName}
+                    className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-primary transition-all p-1"
+                    title="Rename Project"
+                    aria-label="Rename project"
+                  >
+                    <Icons.Edit3 size={14} />
+                  </button>
+                )}
+              </div>
+            )}
             <p className="text-sm text-text-muted mt-1">
               {(project.sections || []).length} section{(project.sections || []).length !== 1 ? 's' : ''} •{' '}
               {(project.sections || []).reduce((sum, s) => sum + (s.sentences || []).length, 0)} sentences
@@ -1287,7 +1375,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
 
           {/* Concept Input */}
           <textarea
-            className="w-full bg-[#1e1933] border border-white/10 rounded-xl p-5 text-sm text-white/90 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 leading-relaxed shadow-2xl transition-all resize-none mb-3"
+            className="w-full bg-surface-2 border border-border-color rounded-xl p-5 text-sm text-white/90 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 leading-relaxed shadow-2xl transition-all resize-none mb-3"
             placeholder="Enter your core video concept, themes, or specific instructions here..."
             value={concept}
             onChange={(e) => setConcept(e.target.value)}
@@ -1302,7 +1390,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
           {/* Duration & Style Controls */}
           <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Target Duration */}
-            <div className="bg-[#1e1933]/50 border border-white/5 rounded-xl p-4">
+            <div className="bg-surface-3 border border-border-color rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Icons.Clock size={14} className="text-primary" />
@@ -1348,7 +1436,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
             </div>
 
             {/* Visual Style */}
-            <div className="bg-[#1e1933]/50 border border-white/5 rounded-xl p-4 flex flex-col">
+            <div className="bg-surface-2/50 border border-border-subtle rounded-xl p-4 flex flex-col">
               <div className="flex items-center gap-2 mb-3">
                 <Icons.ImageIcon size={14} className="text-primary" />
                 <span className="text-xs font-bold text-white uppercase tracking-wider">Visual Style</span>
@@ -1360,7 +1448,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
                     setVisualStyle(e.target.value);
                     handleUpdateProjectSettings({ visualStyle: e.target.value });
                   }}
-                  className="w-full h-full bg-[#0d0b1a] border border-white/10 rounded-lg pl-4 pr-10 text-sm text-white appearance-none focus:border-primary focus:outline-none cursor-pointer"
+                  className="w-full h-full bg-surface-1 border border-border-color rounded-lg pl-4 pr-10 text-sm text-white appearance-none focus:border-primary focus:outline-none cursor-pointer"
                 >
                   {VISUAL_STYLES.map((style) => (
                     <option key={style} value={style}>

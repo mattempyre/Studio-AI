@@ -1,9 +1,12 @@
 
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useLocation, useParams, useNavigate } from '@tanstack/react-router';
 import * as Icons from './Icons';
+import ThemeSelector from './ThemeSelector';
 import { ViewState, User, Project } from '../types';
 import ProjectDropdown from './Sidebar/ProjectDropdown';
+
+const LAST_PROJECT_KEY = 'studioai_last_project_id';
 
 interface LayoutProject {
   id: string;
@@ -38,8 +41,68 @@ const Layout: React.FC<LayoutProps> = ({
   const params = useParams({ strict: false }) as { projectId?: string };
   const navigate = useNavigate();
 
-  const activeProjectId = params.projectId || '';
+  // Get activeProjectId from URL params first, then fall back to localStorage
+  const getStoredProjectId = (): string => {
+    if (typeof window === 'undefined') return '';
+    const stored = localStorage.getItem(LAST_PROJECT_KEY);
+    // Verify the stored project still exists
+    if (stored && projects.some(p => p.id === stored)) {
+      return stored;
+    }
+    return '';
+  };
+
+  const activeProjectId = params.projectId || getStoredProjectId();
   const activeProject = projects.find(p => p.id === activeProjectId);
+
+  // Header inline editing state
+  const [isEditingHeader, setIsEditingHeader] = useState(false);
+  const [headerEditName, setHeaderEditName] = useState('');
+  const headerInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when header editing starts
+  useEffect(() => {
+    if (isEditingHeader && headerInputRef.current) {
+      headerInputRef.current.focus();
+      headerInputRef.current.select();
+    }
+  }, [isEditingHeader]);
+
+  const startHeaderEdit = () => {
+    if (activeProject) {
+      setHeaderEditName(activeProject.name);
+      setIsEditingHeader(true);
+    }
+  };
+
+  const saveHeaderEdit = () => {
+    if (activeProject && headerEditName.trim()) {
+      onUpdateProject(activeProject.id, { name: headerEditName.trim() });
+    }
+    setIsEditingHeader(false);
+  };
+
+  const cancelHeaderEdit = () => {
+    setIsEditingHeader(false);
+    if (activeProject) {
+      setHeaderEditName(activeProject.name);
+    }
+  };
+
+  const handleHeaderKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      saveHeaderEdit();
+    } else if (e.key === 'Escape') {
+      cancelHeaderEdit();
+    }
+  };
+
+  // Persist selected project to localStorage
+  useEffect(() => {
+    if (activeProjectId) {
+      localStorage.setItem(LAST_PROJECT_KEY, activeProjectId);
+    }
+  }, [activeProjectId]);
 
   // Derive currentView from route path
   const getCurrentView = (): ViewState => {
@@ -254,12 +317,39 @@ const Layout: React.FC<LayoutProps> = ({
             )}
 
             {isInCreationFlow && activeProject ? (
-                /* Project Context Display (dropdown moved to sidebar) */
-                <div className="hidden md:flex flex-col justify-center border-l border-white/10 pl-6 h-8">
+                /* Project Context Display with Inline Edit */
+                <div className="hidden md:flex flex-col justify-center border-l border-white/10 pl-6 h-8 group">
                     <label className="text-[9px] text-text-muted font-bold uppercase tracking-wider leading-none mb-1">Active Project</label>
-                    <p className="text-sm font-bold text-white truncate max-w-[200px]" title={activeProject.name}>
-                        {activeProject.name}
-                    </p>
+                    {isEditingHeader ? (
+                      <input
+                        ref={headerInputRef}
+                        type="text"
+                        value={headerEditName}
+                        onChange={(e) => setHeaderEditName(e.target.value)}
+                        onKeyDown={handleHeaderKeyDown}
+                        onBlur={saveHeaderEdit}
+                        className="bg-transparent border-b border-primary text-sm font-bold text-white focus:outline-none w-[200px]"
+                        aria-label="Project name"
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <p
+                          className="text-sm font-bold text-white truncate max-w-[200px] cursor-pointer hover:text-primary transition-colors"
+                          title={`${activeProject.name} (click to edit)`}
+                          onClick={startHeaderEdit}
+                        >
+                            {activeProject.name}
+                        </p>
+                        <button
+                          onClick={startHeaderEdit}
+                          className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-primary transition-all p-0.5"
+                          title="Rename Project"
+                          aria-label="Rename project"
+                        >
+                          <Icons.Edit3 size={12} />
+                        </button>
+                      </div>
+                    )}
                 </div>
             ) : !isInCreationFlow && (
                 /* Dashboard Search */
@@ -312,6 +402,7 @@ const Layout: React.FC<LayoutProps> = ({
               {buttonConfig.text}
             </button>
             <div className="h-6 w-px bg-white/10 hidden md:block"></div>
+            <ThemeSelector />
             <button className="relative p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-white transition-colors">
               <Icons.Bell size={20} />
               <span className="absolute top-2 right-2 size-2 bg-primary rounded-full border border-background-dark"></span>

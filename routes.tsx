@@ -15,17 +15,20 @@ import Storyboard from './components/Storyboard';
 import VideoPreview from './components/VideoPreview';
 import CharacterLibrary from './components/CharacterLibrary';
 import { useAppContext, AppProvider } from './context/AppContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { projectsApi } from './services/backendApi';
 import type { BackendProject } from './types';
 
-// Root Layout Component - wraps all routes with AppProvider and Layout
+// Root Layout Component - wraps all routes with ThemeProvider, AppProvider and Layout
 function RootLayout() {
   return (
-    <AppProvider>
-      <AuthGuard>
-        <LayoutWrapper />
-      </AuthGuard>
-    </AppProvider>
+    <ThemeProvider>
+      <AppProvider>
+        <AuthGuard>
+          <LayoutWrapper />
+        </AuthGuard>
+      </AppProvider>
+    </ThemeProvider>
   );
 }
 
@@ -48,49 +51,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 // Layout wrapper that provides navigation context
 function LayoutWrapper() {
-  const { user, setUser } = useAppContext();
-  const [layoutProjects, setLayoutProjects] = useState<{ id: string; name: string }[]>([]);
-
-  // Fetch projects for the layout dropdown
-  useEffect(() => {
-    const loadProjects = async () => {
-      try {
-        const result = await projectsApi.list();
-        setLayoutProjects(result.projects.map(p => ({ id: p.id, name: p.name })));
-      } catch (error) {
-        console.error('Failed to load projects for layout:', error);
-      }
-    };
-    loadProjects();
-  }, []);
-
-  const handleCreateProject = async (): Promise<string> => {
-    try {
-      const newProject = await projectsApi.create({
-        name: 'Untitled Project',
-        targetDuration: 8,
-        visualStyle: 'cinematic',
-      });
-      // Refresh the projects list
-      const result = await projectsApi.list();
-      setLayoutProjects(result.projects.map(p => ({ id: p.id, name: p.name })));
-      return newProject.id;
-    } catch (error) {
-      console.error('Failed to create project:', error);
-      return `proj_${Date.now()}`;
-    }
-  };
-
-  const handleUpdateProject = async (id: string, updates: { name: string }) => {
-    try {
-      await projectsApi.update(id, updates);
-      // Refresh the projects list
-      const result = await projectsApi.list();
-      setLayoutProjects(result.projects.map(p => ({ id: p.id, name: p.name })));
-    } catch (error) {
-      console.error('Failed to update project:', error);
-    }
-  };
+  const { user, setUser, layoutProjects, handleLayoutProjectUpdate, handleCreateLayoutProject } = useAppContext();
 
   if (!user) return null;
 
@@ -99,8 +60,8 @@ function LayoutWrapper() {
       user={user}
       onLogout={() => setUser(null)}
       projects={layoutProjects}
-      onUpdateProject={handleUpdateProject}
-      onCreateProject={handleCreateProject}
+      onUpdateProject={handleLayoutProjectUpdate}
+      onCreateProject={handleCreateLayoutProject}
     >
       <Outlet />
     </Layout>
@@ -189,8 +150,11 @@ function DashboardPage() {
 
 function ScriptEditorPage() {
   const { projectId } = scriptRoute.useParams();
-  const { libraryCharacters, clonedVoices } = useAppContext();
+  const { layoutProjects, libraryCharacters, clonedVoices, refreshLayoutProjects } = useAppContext();
   const navigate = scriptRoute.useNavigate();
+
+  // Get project name from layout projects (backend-synced)
+  const project = layoutProjects.find((p) => p.id === projectId);
 
   const handleScriptNext = () => {
     navigate({
@@ -202,6 +166,8 @@ function ScriptEditorPage() {
   return (
     <ScriptEditorV2
       projectId={projectId}
+      projectName={project?.name}
+      onUpdateProjectName={refreshLayoutProjects}
       libraryCharacters={libraryCharacters}
       clonedVoices={clonedVoices}
       onNext={handleScriptNext}

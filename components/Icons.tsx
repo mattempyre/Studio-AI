@@ -45,7 +45,9 @@ import {
   Check,
   Sparkles,
   Zap,
-  MessageSquare
+  MessageSquare,
+  Moon,
+  Sun
 } from 'lucide-react';
 
 export {
@@ -94,5 +96,7 @@ export {
   Check,
   Sparkles,
   Zap,
-  MessageSquare
+  MessageSquare,
+  Moon,
+  Sun
 };
