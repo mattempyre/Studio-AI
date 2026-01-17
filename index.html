@@ -12,12 +12,21 @@
         theme: {
           extend: {
             colors: {
-              primary: "#EA2831",
-              "background-dark": "#0d0b1a",
-              "panel-bg": "#131022",
-              "card-bg": "#16132b",
-              "border-color": "#2d2855",
-              "text-muted": "#9b92c9"
+              // DaVinci Resolve inspired palette
+              primary: "#e87400",           // Orange accent (DaVinci's selection color)
+              "primary-dark": "#cc6600",    // Darker orange for hover states
+              "primary-light": "#ff8c1a",   // Lighter orange for highlights
+              "background-dark": "#1a1a1a", // Near-black background
+              "panel-bg": "#242424",        // Panel backgrounds
+              "card-bg": "#2d2d2d",         // Card backgrounds
+              "border-color": "#3a3a3a",    // Subtle borders
+              "text-muted": "#888888",      // Muted text
+              "text-secondary": "#b0b0b0",  // Secondary text
+              // Accent colors for timeline/visual elements
+              "accent-teal": "#3d8b8b",     // Teal (like DaVinci timeline)
+              "accent-green": "#5a8a5a",    // Muted green
+              "accent-blue": "#4a7a9a",     // Steel blue
+              "accent-purple": "#6a5a8a",   // Muted purple
             },
             fontFamily: {
               display: ['"Space Grotesk"', 'sans-serif'],
@@ -29,23 +38,27 @@
     </script>
     <style>
       body {
-        background-color: #0d0b1a;
-        color: white;
+        background-color: #1a1a1a;
+        color: #e0e0e0;
       }
-      /* Custom Scrollbar */
+      /* DaVinci-style Scrollbar */
       ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
+        width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #0d0b1a;
+        background: #1a1a1a;
       }
       ::-webkit-scrollbar-thumb {
-        background: #2d2855;
-        border-radius: 10px;
+        background: #3a3a3a;
+        border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #EA2831;
+        background: #4a4a4a;
+      }
+      /* Selection color */
+      ::selection {
+        background: rgba(232, 116, 0, 0.3);
       }
     </style>
   <script type="importmap">
