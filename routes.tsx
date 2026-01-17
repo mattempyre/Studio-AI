@@ -48,7 +48,49 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 // Layout wrapper that provides navigation context
 function LayoutWrapper() {
-  const { user, setUser, projects, handleProjectUpdate, handleCreateProject } = useAppContext();
+  const { user, setUser } = useAppContext();
+  const [layoutProjects, setLayoutProjects] = useState<{ id: string; name: string }[]>([]);
+
+  // Fetch projects for the layout dropdown
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        const result = await projectsApi.list();
+        setLayoutProjects(result.projects.map(p => ({ id: p.id, name: p.name })));
+      } catch (error) {
+        console.error('Failed to load projects for layout:', error);
+      }
+    };
+    loadProjects();
+  }, []);
+
+  const handleCreateProject = async (): Promise<string> => {
+    try {
+      const newProject = await projectsApi.create({
+        name: 'Untitled Project',
+        targetDuration: 8,
+        visualStyle: 'cinematic',
+      });
+      // Refresh the projects list
+      const result = await projectsApi.list();
+      setLayoutProjects(result.projects.map(p => ({ id: p.id, name: p.name })));
+      return newProject.id;
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      return `proj_${Date.now()}`;
+    }
+  };
+
+  const handleUpdateProject = async (id: string, updates: { name: string }) => {
+    try {
+      await projectsApi.update(id, updates);
+      // Refresh the projects list
+      const result = await projectsApi.list();
+      setLayoutProjects(result.projects.map(p => ({ id: p.id, name: p.name })));
+    } catch (error) {
+      console.error('Failed to update project:', error);
+    }
+  };
 
   if (!user) return null;
 
@@ -56,8 +98,8 @@ function LayoutWrapper() {
     <Layout
       user={user}
       onLogout={() => setUser(null)}
-      projects={projects}
-      onUpdateProject={handleProjectUpdate}
+      projects={layoutProjects}
+      onUpdateProject={handleUpdateProject}
       onCreateProject={handleCreateProject}
     >
       <Outlet />

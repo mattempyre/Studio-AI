@@ -4,13 +4,18 @@ import { Link, useLocation, useParams, useNavigate } from '@tanstack/react-route
 import * as Icons from './Icons';
 import { ViewState, User, Project } from '../types';
 
+interface LayoutProject {
+  id: string;
+  name: string;
+}
+
 interface LayoutProps {
   children: React.ReactNode;
   user: User;
   onLogout: () => void;
-  projects: Project[];
-  onUpdateProject: (project: Project) => void;
-  onCreateProject: () => string; // Returns new project ID
+  projects: LayoutProject[];
+  onUpdateProject: (id: string, updates: { name: string }) => void;
+  onCreateProject: () => string | Promise<string>; // Returns new project ID (sync or async)
 }
 
 const CREATION_STEPS = [
@@ -74,7 +79,7 @@ const Layout: React.FC<LayoutProps> = ({
 
   const saveTitle = () => {
     if (activeProject && tempTitle.trim()) {
-      onUpdateProject({ ...activeProject, name: tempTitle });
+      onUpdateProject(activeProject.id, { name: tempTitle });
     }
     setIsEditingTitle(false);
   };
@@ -275,9 +280,9 @@ const Layout: React.FC<LayoutProps> = ({
                                 <div className="relative">
                                     <select
                                         value={activeProjectId}
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
                                             if (e.target.value === 'new_project_action') {
-                                                const newProjectId = onCreateProject();
+                                                const newProjectId = await Promise.resolve(onCreateProject());
                                                 navigate({
                                                   to: '/project/$projectId/script',
                                                   params: { projectId: newProjectId }
