@@ -37,11 +37,18 @@ describe('Project Validation Schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject name longer than 255 characters', () => {
+    it('should reject name longer than 200 characters', () => {
       const result = createProjectSchema.safeParse({
-        name: 'a'.repeat(256),
+        name: 'a'.repeat(201),
       });
       expect(result.success).toBe(false);
+    });
+
+    it('should accept name with exactly 200 characters', () => {
+      const result = createProjectSchema.safeParse({
+        name: 'a'.repeat(200),
+      });
+      expect(result.success).toBe(true);
     });
 
     it('should reject targetDuration less than 1', () => {
@@ -52,12 +59,20 @@ describe('Project Validation Schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject targetDuration greater than 120', () => {
+    it('should reject targetDuration greater than 180', () => {
       const result = createProjectSchema.safeParse({
         name: 'Test',
-        targetDuration: 121,
+        targetDuration: 181,
       });
       expect(result.success).toBe(false);
+    });
+
+    it('should accept targetDuration of exactly 180', () => {
+      const result = createProjectSchema.safeParse({
+        name: 'Test',
+        targetDuration: 180,
+      });
+      expect(result.success).toBe(true);
     });
 
     it('should accept optional fields as undefined', () => {
@@ -83,7 +98,7 @@ describe('Project Validation Schemas', () => {
 
     it('should still validate field constraints', () => {
       const result = updateProjectSchema.safeParse({
-        targetDuration: 200,
+        targetDuration: 181, // Max is 180
       });
       expect(result.success).toBe(false);
     });

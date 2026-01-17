@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 // Project validation schemas
 export const createProjectSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
-  topic: z.string().optional(),
-  targetDuration: z.number().int().min(1, 'Duration must be at least 1 minute').max(120, 'Duration cannot exceed 120 minutes').optional(),
-  visualStyle: z.string().optional(),
-  voiceId: z.string().optional(),
+  name: z.string().min(1, 'Name is required').max(200, 'Name must be 200 characters or less'),
+  topic: z.string().max(1000, 'Topic must be 1000 characters or less').optional(),
+  targetDuration: z.number().int().min(1, 'Duration must be at least 1 minute').max(180, 'Duration cannot exceed 180 minutes').optional(),
+  visualStyle: z.string().max(100, 'Visual style must be 100 characters or less').optional(),
+  voiceId: z.string().max(50, 'Voice ID must be 50 characters or less').optional(),
 });
 
 export const updateProjectSchema = createProjectSchema.partial();

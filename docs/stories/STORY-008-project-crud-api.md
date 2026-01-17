@@ -3,8 +3,8 @@
 **Epic:** Script Management (EPIC-01)
 **Priority:** Must Have
 **Story Points:** 3
-**Status:** Not Started
-**Assigned To:** Unassigned
+**Status:** Completed
+**Assigned To:** Claude Opus 4.5
 **Created:** 2026-01-17
 **Sprint:** 1
 
@@ -318,8 +318,18 @@ The project API is foundational - most other features depend on it. Consider add
 
 **Status History:**
 - 2026-01-17: Created by Scrum Master
+- 2026-01-17: Completed by Claude Opus 4.5
 
-**Actual Effort:** TBD
+**Actual Effort:** 3 points (matched estimate)
+
+**Implementation Notes:**
+- Updated validation schema: max 200 chars name, max 180 min duration, max 1000 chars topic
+- List endpoint returns `sectionCount` and `sentenceCount` for each project
+- List sorted by `updatedAt` descending (most recent first)
+- Delete returns 204 No Content
+- Delete removes filesystem files via `deleteProjectMedia()`
+- Added path traversal prevention on delete endpoint
+- Test coverage: 90.22% for projects.ts
 
 ---
 

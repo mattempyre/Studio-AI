@@ -1,19 +1,49 @@
 import { Router } from 'express';
-import { db, projects, sections, sentences, projectCast, type NewProject } from '../db/index.js';
-import { eq } from 'drizzle-orm';
+import { db, projects, sections, sentences, projectCast, scriptOutlines, generationJobs, type NewProject } from '../db/index.js';
+import { eq, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { createProjectSchema, updateProjectSchema } from '../validation/schemas.js';
+import { deleteProjectMedia } from '../services/outputPaths.js';
 
 export const projectsRouter = Router();
 
-// GET /api/v1/projects - List all projects
+// GET /api/v1/projects - List all projects with section/sentence counts
 projectsRouter.get('/', async (req, res, next) => {
   try {
-    const allProjects = await db.select().from(projects).orderBy(projects.createdAt);
+    // Get all projects sorted by updatedAt descending (most recent first)
+    const allProjects = await db.select().from(projects).orderBy(desc(projects.updatedAt));
+
+    // Get counts for each project
+    const projectsWithCounts = await Promise.all(
+      allProjects.map(async (project) => {
+        // Count sections
+        const sectionCountResult = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(sections)
+          .where(eq(sections.projectId, project.id));
+        const sectionCount = sectionCountResult[0]?.count ?? 0;
+
+        // Count sentences (via sections)
+        const sentenceCountResult = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(sentences)
+          .innerJoin(sections, eq(sentences.sectionId, sections.id))
+          .where(eq(sections.projectId, project.id));
+        const sentenceCount = sentenceCountResult[0]?.count ?? 0;
+
+        return {
+          ...project,
+          sectionCount,
+          sentenceCount,
+        };
+      })
+    );
 
     res.json({
       success: true,
-      data: allProjects,
+      data: {
+        projects: projectsWithCounts,
+      },
     });
   } catch (error) {
     next(error);
@@ -159,6 +189,17 @@ projectsRouter.delete('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
 
+    // Validate project ID format to prevent path traversal attacks
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ID',
+          message: 'Invalid project ID format',
+        },
+      });
+    }
+
     const existing = await db.select().from(projects).where(eq(projects.id, id)).get();
     if (!existing) {
       return res.status(404).json({
@@ -170,15 +211,15 @@ projectsRouter.delete('/:id', async (req, res, next) => {
       });
     }
 
-    // Delete project (cascades to sections, sentences, cast due to foreign key constraints)
+    // Delete project (cascades to sections, sentences, cast, script_outlines, generation_jobs
+    // due to foreign key constraints with onDelete: 'cascade')
     await db.delete(projects).where(eq(projects.id, id));
 
-    // TODO: Delete associated files from filesystem
+    // Delete associated files from filesystem
+    await deleteProjectMedia(id);
 
-    res.json({
-      success: true,
-      data: { deleted: true },
-    });
+    // Return 204 No Content on successful delete
+    res.status(204).send();
   } catch (error) {
     next(error);
   }
