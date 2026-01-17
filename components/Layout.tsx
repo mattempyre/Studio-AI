@@ -137,14 +137,14 @@ const Layout: React.FC<LayoutProps> = ({
     : null;
 
   const handleBack = () => {
-      if (prevStep && activeProjectId) {
-          navigate({
-            to: `/project/$projectId/${prevStep.id}` as any,
-            params: { projectId: activeProjectId }
-          });
-      } else {
-          navigate({ to: '/' });
-      }
+    if (prevStep && activeProjectId) {
+      navigate({
+        to: `/project/$projectId/${prevStep.id}` as any,
+        params: { projectId: activeProjectId }
+      });
+    } else {
+      navigate({ to: '/' });
+    }
   };
 
   const handleDynamicButtonClick = () => {
@@ -196,9 +196,8 @@ const Layout: React.FC<LayoutProps> = ({
             {/* Dashboard Link */}
             <Link
               to="/"
-              className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${
-                currentView === 'dashboard' ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
-              }`}
+              className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${currentView === 'dashboard' ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
+                }`}
             >
               <Icons.LayoutDashboard size={20} className={currentView === 'dashboard' ? 'text-primary' : ''} />
               <p className="text-sm font-medium hidden lg:block">Dashboard</p>
@@ -208,9 +207,8 @@ const Layout: React.FC<LayoutProps> = ({
             {/* Characters Link */}
             <Link
               to="/characters"
-              className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${
-                currentView === 'characters' ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
-              }`}
+              className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${currentView === 'characters' ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
+                }`}
             >
               <Icons.User size={20} className={currentView === 'characters' ? 'text-primary' : ''} />
               <p className="text-sm font-medium hidden lg:block">Characters</p>
@@ -265,9 +263,8 @@ const Layout: React.FC<LayoutProps> = ({
                     key={item.id}
                     to={`/project/$projectId/${item.path}` as any}
                     params={{ projectId: activeProjectId }}
-                    className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${
-                      isActive ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
-                    }`}
+                    className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${isActive ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
+                      }`}
                   >
                     <item.icon size={20} className={isActive ? 'text-primary' : ''} />
                     <p className="text-sm font-medium hidden lg:block">{item.label}</p>
@@ -307,89 +304,88 @@ const Layout: React.FC<LayoutProps> = ({
           {/* Left Section: Back Button & Search/Project */}
           <div className="flex items-center gap-6 z-10">
             {isInCreationFlow && (
-                 <button
-                    onClick={handleBack}
-                    className="flex items-center justify-center p-2 -ml-2 rounded-lg text-text-muted hover:text-white hover:bg-white/5 transition-all"
-                    title="Go Back"
-                 >
-                     <Icons.ChevronLeft size={20} />
-                 </button>
+              <button
+                onClick={handleBack}
+                className="flex items-center justify-center p-2 -ml-2 rounded-lg text-text-muted hover:text-white hover:bg-white/5 transition-all"
+                title="Go Back"
+              >
+                <Icons.ChevronLeft size={20} />
+              </button>
             )}
 
             {isInCreationFlow && activeProject ? (
-                /* Project Context Display with Inline Edit */
-                <div className="hidden md:flex flex-col justify-center border-l border-white/10 pl-6 h-8 group">
-                    <label className="text-[9px] text-text-muted font-bold uppercase tracking-wider leading-none mb-1">Active Project</label>
-                    {isEditingHeader ? (
-                      <input
-                        ref={headerInputRef}
-                        type="text"
-                        value={headerEditName}
-                        onChange={(e) => setHeaderEditName(e.target.value)}
-                        onKeyDown={handleHeaderKeyDown}
-                        onBlur={saveHeaderEdit}
-                        className="bg-transparent border-b border-primary text-sm font-bold text-white focus:outline-none w-[200px]"
-                        aria-label="Project name"
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <p
-                          className="text-sm font-bold text-white truncate max-w-[200px] cursor-pointer hover:text-primary transition-colors"
-                          title={`${activeProject.name} (click to edit)`}
-                          onClick={startHeaderEdit}
-                        >
-                            {activeProject.name}
-                        </p>
-                        <button
-                          onClick={startHeaderEdit}
-                          className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-primary transition-all p-0.5"
-                          title="Rename Project"
-                          aria-label="Rename project"
-                        >
-                          <Icons.Edit3 size={12} />
-                        </button>
-                      </div>
-                    )}
-                </div>
+              /* Project Context Display with Inline Edit */
+              <div className="hidden md:flex flex-col justify-center border-l border-white/10 pl-6 h-8 group">
+                <label className="text-[9px] text-text-muted font-bold uppercase tracking-wider leading-none mb-1">Active Project</label>
+                {isEditingHeader ? (
+                  <input
+                    ref={headerInputRef}
+                    type="text"
+                    value={headerEditName}
+                    onChange={(e) => setHeaderEditName(e.target.value)}
+                    onKeyDown={handleHeaderKeyDown}
+                    onBlur={saveHeaderEdit}
+                    className="bg-transparent border-b border-primary text-sm font-bold text-white focus:outline-none w-[200px]"
+                    aria-label="Project name"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p
+                      className="text-sm font-bold text-white truncate max-w-[200px] cursor-pointer hover:text-primary transition-colors"
+                      title={`${activeProject.name} (click to edit)`}
+                      onClick={startHeaderEdit}
+                    >
+                      {activeProject.name}
+                    </p>
+                    <button
+                      onClick={startHeaderEdit}
+                      className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-primary transition-all p-0.5"
+                      title="Rename Project"
+                      aria-label="Rename project"
+                    >
+                      <Icons.Edit3 size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : !isInCreationFlow && (
-                /* Dashboard Search */
-                <div className="relative group w-64 hidden md:block">
-                    <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-white transition-colors" size={18} />
-                    <input
-                      className="w-full bg-surface-2 border border-border-subtle rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder:text-text-muted focus:ring-1 focus:ring-primary focus:bg-surface-3 transition-all"
-                      placeholder="Search..."
-                      type="text"
-                    />
-                </div>
+              /* Dashboard Search */
+              <div className="relative group w-64 hidden md:block">
+                <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-white transition-colors" size={18} />
+                <input
+                  className="w-full bg-surface-2 border border-border-subtle rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder:text-text-muted focus:ring-1 focus:ring-primary focus:bg-surface-3 transition-all"
+                  placeholder="Search..."
+                  type="text"
+                />
+              </div>
             )}
           </div>
 
           {/* Center Section: Breadcrumbs */}
           {isInCreationFlow && activeProjectId && (
-               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-                 {CREATION_STEPS.map((step, idx) => {
-                   const isActive = step.id === currentView;
-                   const isPast = idx < currentStepIndex;
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
+              {CREATION_STEPS.map((step, idx) => {
+                const isActive = step.id === currentView;
+                const isPast = idx < currentStepIndex;
 
-                   return (
-                     <React.Fragment key={step.id}>
-                       <Link
-                         to={`/project/$projectId/${step.id}` as any}
-                         params={{ projectId: activeProjectId }}
-                         className={`flex items-center gap-2 text-xs font-bold transition-colors ${
-                           isActive ? 'text-white' : isPast ? 'text-primary hover:text-primary/80' : 'text-text-muted'
-                         }`}
-                       >
-                         {isActive && <span className="size-1.5 rounded-full bg-primary animate-pulse"></span>}
-                         {step.label}
-                       </Link>
-                       {idx < CREATION_STEPS.length - 1 && (
-                         <Icons.ChevronRight size={12} className="text-white/20" />
-                       )}
-                     </React.Fragment>
-                   );
-                 })}
-               </div>
+                return (
+                  <React.Fragment key={step.id}>
+                    <Link
+                      to={`/project/$projectId/${step.id}` as any}
+                      params={{ projectId: activeProjectId }}
+                      className={`flex items-center gap-2 text-xs font-bold transition-colors ${isActive ? 'text-white' : isPast ? 'text-primary hover:text-primary/80' : 'text-text-muted'
+                        }`}
+                    >
+                      {isActive && <span className="size-1.5 rounded-full bg-primary animate-pulse"></span>}
+                      {step.label}
+                    </Link>
+                    {idx < CREATION_STEPS.length - 1 && (
+                      <Icons.ChevronRight size={12} className="text-white/20" />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
           )}
 
           {/* Right Section: Actions */}

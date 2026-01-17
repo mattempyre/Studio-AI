@@ -51,6 +51,8 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
     "@types/supertest": "^6.0.2",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.0",

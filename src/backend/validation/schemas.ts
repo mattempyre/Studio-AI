@@ -43,6 +43,15 @@ export const createSentenceSchema = z.object({
 
 export const updateSentenceSchema = createSentenceSchema.partial().omit({ sectionId: true });
 
+// Cast validation schemas (STORY-013)
+export const addToCastSchema = z.object({
+  characterId: z.string().min(1, 'Character ID is required'),
+});
+
+export const addToCastBatchSchema = z.object({
+  characterIds: z.array(z.string().min(1)).min(1, 'At least one character ID is required'),
+});
+
 // Type exports
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
@@ -52,3 +61,6 @@ export type CreateSectionInput = z.infer<typeof createSectionSchema>;
 export type UpdateSectionInput = z.infer<typeof updateSectionSchema>;
 export type CreateSentenceInput = z.infer<typeof createSentenceSchema>;
 export type UpdateSentenceInput = z.infer<typeof updateSentenceSchema>;
+export type AddToCastInput = z.infer<typeof addToCastSchema>;
+export type AddToCastBatchInput = z.infer<typeof addToCastBatchSchema>;
+

@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { db, projects, sections, sentences, projectCast, scriptOutlines, generationJobs, type NewProject } from '../db/index.js';
-import { eq, desc, sql } from 'drizzle-orm';
+import { db, projects, sections, sentences, projectCast, characters, scriptOutlines, generationJobs, type NewProject } from '../db/index.js';
+import { eq, desc, sql, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { createProjectSchema, updateProjectSchema } from '../validation/schemas.js';
+import { createProjectSchema, updateProjectSchema, addToCastSchema, addToCastBatchSchema } from '../validation/schemas.js';
 import { deleteProjectMedia } from '../services/outputPaths.js';
 
 export const projectsRouter = Router();
@@ -123,7 +123,17 @@ projectsRouter.get('/:id', async (req, res, next) => {
     );
 
     // Get project cast
-    const cast = await db.select().from(projectCast)
+    // Get project cast with full details
+    const cast = await db.select({
+      id: characters.id,
+      name: characters.name,
+      description: characters.description,
+      referenceImages: characters.referenceImages,
+      styleLora: characters.styleLora,
+      createdAt: characters.createdAt,
+    })
+      .from(projectCast)
+      .innerJoin(characters, eq(projectCast.characterId, characters.id))
       .where(eq(projectCast.projectId, id));
 
     res.json({
@@ -131,7 +141,7 @@ projectsRouter.get('/:id', async (req, res, next) => {
       data: {
         ...project,
         sections: sectionsWithSentences,
-        cast: cast.map(c => c.characterId),
+        cast,
       },
     });
   } catch (error) {
@@ -179,6 +189,151 @@ projectsRouter.put('/:id', async (req, res, next) => {
       success: true,
       data: updated,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/projects/:id/cast - Add character to cast
+projectsRouter.post('/:id/cast', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const parsed = addToCastSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => e.message).join(', '),
+        },
+      });
+    }
+
+    const { characterId } = parsed.data;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } });
+    }
+
+    // Verify character exists
+    const character = await db.select().from(characters).where(eq(characters.id, characterId)).get();
+    if (!character) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Character not found' } });
+    }
+
+    // Check if already in cast
+    const existing = await db.select().from(projectCast)
+      .where(and(eq(projectCast.projectId, id), eq(projectCast.characterId, characterId)))
+      .get();
+
+    if (existing) {
+      return res.status(400).json({ success: false, error: { code: 'DUPLICATE', message: 'Character already in cast' } });
+    }
+
+    // Add to cast
+    await db.insert(projectCast).values({ projectId: id, characterId });
+
+    // Return updated cast list
+    const updatedCast = await db.select({
+      id: characters.id,
+      name: characters.name,
+      description: characters.description,
+      referenceImages: characters.referenceImages,
+      styleLora: characters.styleLora,
+      createdAt: characters.createdAt,
+    })
+      .from(projectCast)
+      .innerJoin(characters, eq(projectCast.characterId, characters.id))
+      .where(eq(projectCast.projectId, id));
+
+    res.status(201).json({
+      success: true,
+      data: updatedCast,
+      message: 'Character added to cast'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/projects/:id/cast/batch - Add multiple characters to cast
+projectsRouter.post('/:id/cast/batch', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const parsed = addToCastBatchSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => e.message).join(', '),
+        },
+      });
+    }
+
+    const { characterIds } = parsed.data;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } });
+    }
+
+    const added: string[] = [];
+    const skipped: string[] = [];
+
+    for (const charId of characterIds) {
+      // Check existence
+      const character = await db.select().from(characters).where(eq(characters.id, charId)).get();
+      if (!character) {
+        continue;
+      }
+
+      // Check duplicate
+      const existing = await db.select().from(projectCast)
+        .where(and(eq(projectCast.projectId, id), eq(projectCast.characterId, charId)))
+        .get();
+
+      if (!existing) {
+        await db.insert(projectCast).values({ projectId: id, characterId: charId });
+        added.push(charId);
+      } else {
+        skipped.push(charId);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { added, skipped },
+      message: `${added.length} characters added to cast`
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/v1/projects/:id/cast/:characterId - Remove character from cast
+projectsRouter.delete('/:id/cast/:characterId', async (req, res, next) => {
+  try {
+    const { id, characterId } = req.params;
+
+    // Check if it exists in cast
+    const existing = await db.select().from(projectCast)
+      .where(and(eq(projectCast.projectId, id), eq(projectCast.characterId, characterId)))
+      .get();
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Character not in cast' } });
+    }
+
+    await db.delete(projectCast)
+      .where(and(eq(projectCast.projectId, id), eq(projectCast.characterId, characterId)));
+
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

@@ -3,7 +3,7 @@
 **Epic:** Script Management (EPIC-01)
 **Priority:** Must Have
 **Story Points:** 5
-**Status:** Not Started
+**Status:** Completed
 **Assigned To:** Unassigned
 **Created:** 2026-01-17
 **Sprint:** 2
