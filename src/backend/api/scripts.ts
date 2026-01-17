@@ -42,6 +42,137 @@ const regenerateSectionSchema = z.object({
   sectionIndex: z.number().min(0),
 });
 
+const quickGenerateSchema = z.object({
+  topic: z.string().min(1, 'Topic is required'),
+  targetDurationMinutes: z.number().min(1).max(180, 'Duration must be between 1 and 180 minutes'),
+  visualStyle: z.string().optional().default('cinematic'),
+  useSearchGrounding: z.boolean().optional().default(false),
+});
+
+// =============================================================================
+// Quick Generate Script (synchronous, for simple use case)
+// =============================================================================
+
+/**
+ * POST /api/v1/projects/:projectId/quick-generate
+ * Synchronously generates a script and saves sections/sentences to the database.
+ * This is a simpler alternative to the async outline-first workflow.
+ */
+scriptsRouter.post('/:projectId/quick-generate', async (req: Request, res: Response, next) => {
+  try {
+    const projectId = req.params.projectId as string;
+
+    // Validate request body
+    const parsed = quickGenerateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => e.message).join(', '),
+        },
+      });
+    }
+
+    const { topic, targetDurationMinutes, visualStyle, useSearchGrounding } = parsed.data;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, projectId)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Update project with the new topic/duration/style
+    await db.update(projects)
+      .set({
+        topic,
+        targetDuration: targetDurationMinutes,
+        visualStyle,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, projectId));
+
+    // Delete existing sections and sentences for this project
+    const existingSections = await db.select().from(sections).where(eq(sections.projectId, projectId));
+    for (const section of existingSections) {
+      await db.delete(sentences).where(eq(sentences.sectionId, section.id));
+    }
+    await db.delete(sections).where(eq(sections.projectId, projectId));
+
+    // Generate script using Deepseek
+    const client = getDeepseekClient();
+    const generatedScript = await client.generateScript({
+      topic,
+      targetDurationMinutes,
+      visualStyle,
+      useSearchGrounding,
+    });
+
+    // Save sections and sentences to database
+    const savedSections: Array<{ id: string; title: string; sentenceCount: number }> = [];
+
+    for (let sectionIdx = 0; sectionIdx < generatedScript.sections.length; sectionIdx++) {
+      const genSection = generatedScript.sections[sectionIdx];
+      const sectionId = nanoid();
+
+      // Insert section
+      await db.insert(sections).values({
+        id: sectionId,
+        projectId,
+        title: genSection.title,
+        order: sectionIdx,
+      });
+
+      // Insert sentences
+      for (let sentenceIdx = 0; sentenceIdx < genSection.sentences.length; sentenceIdx++) {
+        const genSentence = genSection.sentences[sentenceIdx];
+        await db.insert(sentences).values({
+          id: nanoid(),
+          sectionId,
+          text: genSentence.text,
+          order: sentenceIdx,
+          imagePrompt: genSentence.imagePrompt || null,
+          videoPrompt: genSentence.videoPrompt || null,
+          cameraMovement: 'static',
+          motionStrength: 0.5,
+          status: 'pending',
+        });
+      }
+
+      savedSections.push({
+        id: sectionId,
+        title: genSection.title,
+        sentenceCount: genSection.sentences.length,
+      });
+    }
+
+    // Emit script generated event
+    await inngest.send({
+      name: 'script/completed',
+      data: {
+        projectId,
+        sectionCount: generatedScript.sections.length,
+        sentenceCount: generatedScript.totalSentences,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        title: generatedScript.title,
+        sections: savedSections,
+        totalSentences: generatedScript.totalSentences,
+        estimatedDurationMinutes: generatedScript.estimatedDurationMinutes,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // =============================================================================
 // Generate Outline Only (for outline-first workflow)
 // =============================================================================

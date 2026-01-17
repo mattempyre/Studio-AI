@@ -13,8 +13,9 @@ import { inngestHandler } from './api/inngest.js';
 import { inngest } from './inngest/index.js';
 import { setupWebSocket, closeWebSocket, getTotalClients } from './websocket/index.js';
 
-// Load environment variables
-config();
+// Load environment variables (try .env.local first, then .env)
+config({ path: '.env.local' });
+config(); // Also load .env for defaults
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -152,3 +153,4 @@ server.listen(PORT, () => {
 });
 
 export { app, server, wss, db, inngest };
+// reload trigger

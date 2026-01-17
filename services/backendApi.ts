@@ -51,6 +51,26 @@ export const projectsApi = {
   },
 };
 
+// AI Expansion types
+export interface GeneratedSentence {
+  text: string;
+  imagePrompt?: string;
+  videoPrompt?: string;
+}
+
+export interface AIExpandResult {
+  sectionId: string;
+  sectionTitle: string;
+  generatedSentences: GeneratedSentence[];
+  insertPosition: number;
+}
+
+export interface AIExpandAcceptResult {
+  sectionId: string;
+  insertedCount: number;
+  sentences: BackendSentence[];
+}
+
 // Sections API
 export const sectionsApi = {
   get: async (id: string): Promise<BackendSection> => {
@@ -94,6 +114,39 @@ export const sectionsApi = {
       const error = await response.json().catch(() => ({ error: { message: 'Reorder failed' } }));
       throw new Error(error.error?.message || 'Reorder failed');
     }
+  },
+
+  // AI Section Expansion
+  aiExpand: async (
+    sectionId: string,
+    data: {
+      mode: 'quick' | 'guided';
+      prompt?: string;
+      sentenceCount: number;
+      insertAfterSentenceId?: string;
+    }
+  ): Promise<AIExpandResult> => {
+    const response = await fetch(`${API_BASE}/sections/${sectionId}/ai-expand`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  aiExpandAccept: async (
+    sectionId: string,
+    data: {
+      generatedSentences: GeneratedSentence[];
+      insertAfterSentenceId?: string;
+    }
+  ): Promise<AIExpandAcceptResult> => {
+    const response = await fetch(`${API_BASE}/sections/${sectionId}/ai-expand/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
   },
 };
 
@@ -162,6 +215,33 @@ export const sentencesApi = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetSectionId, targetOrder }),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Scripts API
+export interface QuickGenerateResult {
+  title: string;
+  sections: Array<{ id: string; title: string; sentenceCount: number }>;
+  totalSentences: number;
+  estimatedDurationMinutes: number;
+}
+
+export const scriptsApi = {
+  quickGenerate: async (
+    projectId: string,
+    data: {
+      topic: string;
+      targetDurationMinutes: number;
+      visualStyle?: string;
+      useSearchGrounding?: boolean;
+    }
+  ): Promise<QuickGenerateResult> => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/quick-generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     });
     return handleResponse(response);
   },

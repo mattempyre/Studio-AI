@@ -37,7 +37,15 @@ import {
   Mic,
   UploadCloud,
   Edit3,
-  Globe
+  Globe,
+  Target,
+  FileText,
+  AlertCircle,
+  AlertTriangle,
+  Check,
+  Sparkles,
+  Zap,
+  MessageSquare
 } from 'lucide-react';
 
 export {
@@ -78,5 +86,13 @@ export {
   Mic,
   UploadCloud,
   Edit3,
-  Globe
+  Globe,
+  Target,
+  FileText,
+  AlertCircle,
+  AlertTriangle,
+  Check,
+  Sparkles,
+  Zap,
+  MessageSquare
 };
