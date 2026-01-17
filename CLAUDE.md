@@ -150,6 +150,11 @@ Use git worktrees to work on multiple stories in parallel. Each story should hav
 # Create a worktree for a story
 git worktree add ../Studio-AI-STORY-XXX -b feature/STORY-XXX-description
 
+# Set up ports for the worktree (IMPORTANT!)
+cd ../Studio-AI-STORY-XXX
+npm install
+npm run setup:ports
+
 # List active worktrees
 git worktree list
 
@@ -158,6 +163,40 @@ git worktree remove ../Studio-AI-STORY-XXX
 ```
 
 **Worktree naming convention:** `../Studio-AI-STORY-{ID}` (sibling directory to main repo)
+
+### Worktree Port Configuration
+
+Each worktree can run its own dev servers on different ports to avoid conflicts. Ports are assigned based on story number:
+
+| Worktree | Frontend | Backend | Inngest |
+|----------|----------|---------|---------|
+| main | 3000 | 3001 | 8288 |
+| STORY-010 | 3100 | 3101 | 8210 |
+| STORY-011 | 3110 | 3111 | 8211 |
+| STORY-012 | 3120 | 3121 | 8212 |
+
+**Setup ports after creating a worktree:**
+```bash
+cd ../Studio-AI-STORY-011
+npm run setup:ports    # Generates .env.local with correct ports
+npm run dev:all        # Starts all servers on configured ports
+```
+
+The `npm run setup:ports` command:
+- Extracts story number from directory name
+- Creates `.env.local` with `PORT`, `VITE_PORT`, `INNGEST_DEV_PORT`
+- Preserves any existing non-port environment variables
+
+**Running multiple worktrees simultaneously:**
+```bash
+# Terminal 1 - Main repo
+cd Studio-AI
+npm run dev:all        # Frontend: 3000, Backend: 3001
+
+# Terminal 2 - STORY-011 worktree
+cd Studio-AI-STORY-011
+npm run dev:all        # Frontend: 3110, Backend: 3111
+```
 
 ### Story Dependencies
 

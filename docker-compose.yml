@@ -2,11 +2,13 @@ version: '3.8'
 
 services:
   # Inngest Dev Server - Job queue orchestration
+  # Ports can be customized via environment variables for worktree development:
+  #   INNGEST_DEV_PORT=8211 BACKEND_PORT=3101 docker-compose up inngest
   inngest:
     image: inngest/inngest:latest
     ports:
-      - "8288:8288"
-    command: inngest dev -u http://host.docker.internal:3001/api/v1/inngest --no-poll
+      - "${INNGEST_DEV_PORT:-8288}:8288"
+    command: inngest dev -u http://host.docker.internal:${PORT:-3001}/api/v1/inngest --no-poll
     environment:
       - INNGEST_LOG_LEVEL=info
     extra_hosts:

@@ -4,9 +4,12 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    // Support custom port via VITE_PORT for worktree development
+    const port = env.VITE_PORT ? parseInt(env.VITE_PORT, 10) : 3000;
+
     return {
       server: {
-        port: 3000,
+        port,
         host: '0.0.0.0',
       },
       plugins: [react()],
