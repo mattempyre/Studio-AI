@@ -13,10 +13,10 @@ export const updateProjectSchema = createProjectSchema.partial();
 
 // Character validation schemas
 export const createCharacterSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
-  description: z.string().optional(),
-  referenceImages: z.array(z.string().url('Invalid image URL')).optional(),
-  styleLora: z.string().optional(),
+  name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
+  description: z.string().max(2000, 'Description must be 2000 characters or less').optional(),
+  referenceImages: z.array(z.string()).max(5, 'Maximum 5 reference images allowed').optional(),
+  styleLora: z.string().max(100, 'Style LoRA must be 100 characters or less').optional(),
 });
 
 export const updateCharacterSchema = createCharacterSchema.partial();

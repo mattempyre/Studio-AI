@@ -123,10 +123,26 @@ describe('Character Validation Schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject invalid image URLs', () => {
+    it('should accept referenceImages as string array (internal URLs)', () => {
+      // referenceImages are now internal API URLs added via upload endpoint
       const result = createCharacterSchema.safeParse({
         name: 'Alex',
-        referenceImages: ['not-a-url'],
+        referenceImages: ['/api/v1/characters/char123/images/0'],
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject more than 5 reference images', () => {
+      const result = createCharacterSchema.safeParse({
+        name: 'Alex',
+        referenceImages: [
+          '/api/v1/characters/char123/images/0',
+          '/api/v1/characters/char123/images/1',
+          '/api/v1/characters/char123/images/2',
+          '/api/v1/characters/char123/images/3',
+          '/api/v1/characters/char123/images/4',
+          '/api/v1/characters/char123/images/5', // 6th - should fail
+        ],
       });
       expect(result.success).toBe(false);
     });
