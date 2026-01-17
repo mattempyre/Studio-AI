@@ -57,6 +57,7 @@ export interface BackendProject {
   status: string;
   sections: BackendSection[];
   cast: string[];
+  characters?: Character[];
   createdAt: Date | null;
   updatedAt: Date | null;
 }
@@ -143,14 +144,14 @@ export interface Project {
   type: string;
   status: 'draft' | 'rendering' | 'completed';
   lastEdited: string;
-  createdAt: string; 
-  thumbnail?: string; 
+  createdAt: string;
+  thumbnail?: string;
   script: ScriptSection[];
   scenes: Scene[];
-  textOverlays: TextOverlay[]; 
+  textOverlays: TextOverlay[];
   voiceId?: string; // New field
   musicTrack?: string; // Deprecated in favor of audioTracks
-  musicVolume?: number; 
+  musicVolume?: number;
   audioTracks?: AudioTrack[]; // New field for multi-track audio
   progress: number;
   sources?: Source[];
