@@ -10,12 +10,11 @@ import React from 'react';
 import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
-import ScriptEditor from './components/ScriptEditor';
+import ScriptEditorV2 from './components/ScriptEditorV2';
 import Storyboard from './components/Storyboard';
 import VideoPreview from './components/VideoPreview';
 import CharacterLibrary from './components/CharacterLibrary';
 import { useAppContext, AppProvider } from './context/AppContext';
-import { Scene } from './types';
 
 // Root Layout Component - wraps all routes with AppProvider and Layout
 function RootLayout() {
@@ -96,74 +95,10 @@ function DashboardPage() {
 
 function ScriptEditorPage() {
   const { projectId } = scriptRoute.useParams();
-  const {
-    projects,
-    libraryCharacters,
-    clonedVoices,
-    handleAddCharacterToLibrary,
-    handleUpdateLibraryCharacter,
-    handleAddClonedVoice,
-    handleProjectUpdate,
-  } = useAppContext();
+  const { libraryCharacters, clonedVoices } = useAppContext();
   const navigate = scriptRoute.useNavigate();
 
-  const project = projects.find((p) => p.id === projectId);
-
-  if (!project) {
-    return <Navigate to="/" />;
-  }
-
   const handleScriptNext = () => {
-    // Process script and generate scenes
-    const newScenes: Scene[] = [];
-    const visualStyle = project.visualStyle || 'Cinematic';
-
-    const characters = project.characters || [];
-    let characterContext = '';
-    if (characters.length > 0) {
-      characterContext =
-        ' CAST VISUALS: ' +
-        characters.map((c) => `${c.name} looks like (${c.description})`).join('. ');
-    }
-
-    project.script.forEach((section) => {
-      const sentences = section.content.match(/[^\.!\?]+[\.!\?]+/g) || [section.content];
-
-      for (let i = 0; i < sentences.length; i += 1) {
-        const chunk = sentences[i].trim();
-        if (!chunk) continue;
-
-        const sceneId = `sc_${section.id}_${i}`;
-        const existingScene = project.scenes.find((s) => s.id === sceneId);
-
-        const imagePrompt = `${visualStyle} shot representing: ${chunk.substring(0, 50)}... ${characterContext}`;
-
-        if (existingScene) {
-          newScenes.push({
-            ...existingScene,
-            narration: chunk,
-          });
-        } else {
-          newScenes.push({
-            id: sceneId,
-            scriptSectionId: section.id,
-            timestamp: '00:00',
-            narration: chunk,
-            imagePrompt: imagePrompt,
-            videoPrompt: `${visualStyle} video of ${imagePrompt}, ${chunk.substring(0, 30)}. High motion, 4k.`,
-            imageUrl: `https://picsum.photos/seed/${section.id}_${i}/800/450`,
-            cameraMovement: 'Static',
-            visualStyle: visualStyle,
-          });
-        }
-      }
-    });
-
-    handleProjectUpdate({
-      ...project,
-      scenes: newScenes,
-    });
-
     navigate({
       to: '/project/$projectId/storyboard',
       params: { projectId },
@@ -171,14 +106,10 @@ function ScriptEditorPage() {
   };
 
   return (
-    <ScriptEditor
-      project={project}
+    <ScriptEditorV2
+      projectId={projectId}
       libraryCharacters={libraryCharacters}
       clonedVoices={clonedVoices}
-      onAddCharacterToLibrary={handleAddCharacterToLibrary}
-      onUpdateLibraryCharacter={handleUpdateLibraryCharacter}
-      onAddClonedVoice={handleAddClonedVoice}
-      onUpdateProject={handleProjectUpdate}
       onNext={handleScriptNext}
     />
   );

@@ -49,9 +49,9 @@ vi.mock('../../../components/CharacterLibrary', () => ({
   default: () => <div data-testid="character-library">Character Library Component</div>,
 }));
 
-vi.mock('../../../components/ScriptEditor', () => ({
-  default: ({ project }: { project: { name: string } }) => (
-    <div data-testid="script-editor">Script Editor - {project.name}</div>
+vi.mock('../../../components/ScriptEditorV2', () => ({
+  default: ({ projectId }: { projectId: string }) => (
+    <div data-testid="script-editor">Script Editor - {projectId}</div>
   ),
 }));
 
@@ -199,7 +199,7 @@ describe('Router Configuration', () => {
       });
     });
 
-    it('should redirect to dashboard for non-existent project', async () => {
+    it('should render script editor for any projectId (backend handles validation)', async () => {
       const memoryHistory = createMemoryHistory({
         initialEntries: ['/project/non_existent_id/script'],
       });
@@ -209,8 +209,9 @@ describe('Router Configuration', () => {
       );
 
       await waitFor(() => {
-        // Navigate component redirects to dashboard for non-existent project
-        expect(screen.getByTestId('dashboard')).toBeInTheDocument();
+        // ScriptEditorV2 fetches project from backend, so it renders with the projectId
+        // Backend handles 404 for non-existent projects
+        expect(screen.getByTestId('script-editor')).toBeInTheDocument();
       });
     });
   });
