@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import ScriptEditor from './components/ScriptEditor';
 import Storyboard from './components/Storyboard';
 import VideoPreview from './components/VideoPreview';
+import CharacterLibrary from './components/CharacterLibrary';
 import { ViewState, Project, User, Scene, Character, Voice } from './types';
 import { INITIAL_PROJECT } from './constants';
 
@@ -221,6 +222,8 @@ const App: React.FC = () => {
         );
       case 'video':
         return <VideoPreview project={activeProject} onUpdateProject={handleProjectUpdate} />;
+      case 'characters':
+        return <CharacterLibrary />;
       default:
         return (
             <Dashboard 
