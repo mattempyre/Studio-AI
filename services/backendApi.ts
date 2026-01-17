@@ -49,6 +49,34 @@ export const projectsApi = {
       throw new Error(error.error?.message || 'Delete failed');
     }
   },
+
+  addCast: async (projectId: string, characterId: string): Promise<any[]> => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/cast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ characterId }),
+    });
+    return handleResponse(response);
+  },
+
+  addCastBatch: async (projectId: string, characterIds: string[]): Promise<{ added: string[]; skipped: string[] }> => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/cast/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ characterIds }),
+    });
+    return handleResponse(response);
+  },
+
+  removeCast: async (projectId: string, characterId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/cast/${characterId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: { message: 'Remove cast failed' } }));
+      throw new Error(error.error?.message || 'Remove cast failed');
+    }
+  },
 };
 
 // AI Expansion types

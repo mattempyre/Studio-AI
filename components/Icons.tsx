@@ -47,7 +47,8 @@ import {
   Zap,
   MessageSquare,
   Moon,
-  Sun
+  Sun,
+  Users
 } from 'lucide-react';
 
 export {
@@ -76,6 +77,7 @@ export {
   Video,
   Type,
   User,
+  Users,
   Clock,
   ChevronDown,
   LogOut,

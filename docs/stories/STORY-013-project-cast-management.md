@@ -3,7 +3,7 @@
 **Epic:** Character System (EPIC-02)
 **Priority:** Must Have
 **Story Points:** 2
-**Status:** Ready for Development
+**Status:** Completed
 **Assigned To:** Unassigned
 **Created:** 2026-01-17
 **Sprint:** 2
