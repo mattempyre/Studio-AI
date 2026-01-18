@@ -109,6 +109,7 @@ const Layout: React.FC<LayoutProps> = ({
     const path = location.pathname;
     if (path === '/') return 'dashboard';
     if (path === '/characters') return 'characters';
+    if (path === '/style-builder') return 'style-builder';
     if (path.includes('/script')) return 'script';
     if (path.includes('/storyboard')) return 'storyboard';
     if (path.includes('/video')) return 'video';
@@ -213,6 +214,17 @@ const Layout: React.FC<LayoutProps> = ({
               <Icons.User size={20} className={currentView === 'characters' ? 'text-primary' : ''} />
               <p className="text-sm font-medium hidden lg:block">Characters</p>
               {currentView === 'characters' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary hidden lg:block"></div>}
+            </Link>
+
+            {/* Style Builder Link */}
+            <Link
+              to="/style-builder"
+              className={`flex items-center gap-3 px-3 lg:px-4 py-3 rounded-xl cursor-pointer transition-all group ${currentView === 'style-builder' ? 'bg-primary/20 text-white' : 'text-text-muted hover:bg-white/5 hover:text-white'
+                }`}
+            >
+              <Icons.Palette size={20} className={currentView === 'style-builder' ? 'text-primary' : ''} />
+              <p className="text-sm font-medium hidden lg:block">Style Builder</p>
+              {currentView === 'style-builder' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary hidden lg:block"></div>}
             </Link>
 
             {/* Project Scope Separator & Dropdown */}

@@ -6,7 +6,9 @@ export const projects = sqliteTable('projects', {
   name: text('name').notNull(),
   topic: text('topic'), // The topic used to generate the script
   targetDuration: integer('target_duration').notNull().default(8), // minutes
-  visualStyle: text('visual_style').notNull().default('cinematic'),
+  modelId: text('model_id').default('z-image-turbo'), // Selected generation model ID
+  styleId: text('style_id').default('cinematic'), // Selected visual style ID
+  visualStyle: text('visual_style').notNull().default('cinematic'), // Legacy field, kept for compatibility
   voiceId: text('voice_id').default('puck'), // Selected TTS voice
   status: text('status').notNull().default('draft'), // draft, generating, ready
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
@@ -100,6 +102,37 @@ export interface SectionOutline {
   status: 'pending' | 'generating' | 'completed' | 'failed';
 }
 
+// Generation models table - ComfyUI workflow configurations
+export const generationModels = sqliteTable('generation_models', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  workflowFile: text('workflow_file'), // Path to ComfyUI workflow JSON
+  workflowCategory: text('workflow_category').notNull().default('image'), // 'image' | 'video'
+  workflowType: text('workflow_type').notNull().default('text-to-image'), // 'text-to-image' | 'image-to-image' | 'image-to-video'
+  defaultSteps: integer('default_steps').default(4),
+  defaultCfg: real('default_cfg').default(1.0),
+  defaultFrames: integer('default_frames'), // For video models: number of frames
+  defaultFps: integer('default_fps'), // For video models: frames per second
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+// Visual styles table - prompt prefixes and LoRA configurations
+export const visualStyles = sqliteTable('visual_styles', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  styleType: text('style_type').notNull().default('prompt'), // 'prompt' | 'lora'
+  promptPrefix: text('prompt_prefix'), // For prompt-based styles
+  loraFile: text('lora_file'), // For LoRA-based styles
+  loraStrength: real('lora_strength').default(1.0),
+  compatibleModels: text('compatible_models', { mode: 'json' }).$type<string[]>().default([]),
+  requiresCharacterRef: integer('requires_character_ref', { mode: 'boolean' }).notNull().default(false),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 // Generation jobs table - tracks background job status
 export const generationJobs = sqliteTable('generation_jobs', {
   id: text('id').primaryKey(),
@@ -139,3 +172,9 @@ export type NewGenerationJob = typeof generationJobs.$inferInsert;
 
 export type ScriptOutline = typeof scriptOutlines.$inferSelect;
 export type NewScriptOutline = typeof scriptOutlines.$inferInsert;
+
+export type GenerationModel = typeof generationModels.$inferSelect;
+export type NewGenerationModel = typeof generationModels.$inferInsert;
+
+export type VisualStyle = typeof visualStyles.$inferSelect;
+export type NewVisualStyle = typeof visualStyles.$inferInsert;

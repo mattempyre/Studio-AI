@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import * as Icons from '../Icons';
-import { Character } from '../../types';
-import { VISUAL_STYLES, DURATION_PRESETS, formatDuration } from './utils';
+import { Character, GenerationModel, VisualStyle } from '../../types';
+import { DURATION_PRESETS, formatDuration } from './utils';
 
 // Generation progress state for long-form scripts
 export interface GenerationProgress {
@@ -25,6 +25,16 @@ interface PromptsPanelProps {
     targetDuration: number;
     setTargetDuration: (duration: number) => void;
     onUpdateTargetDuration: (duration: number) => void;
+    // New model/style props
+    models: GenerationModel[];
+    styles: VisualStyle[];
+    selectedModelId: string | null;
+    selectedStyleId: string | null;
+    onModelChange: (modelId: string) => void;
+    onStyleChange: (styleId: string) => void;
+    modelsLoading?: boolean;
+    stylesLoading?: boolean;
+    // Legacy props (kept for backward compatibility)
     visualStyle: string;
     setVisualStyle: (style: string) => void;
     onUpdateVisualStyle: (style: string) => void;
@@ -48,6 +58,16 @@ export const PromptsPanel: React.FC<PromptsPanelProps> = ({
     targetDuration,
     setTargetDuration,
     onUpdateTargetDuration,
+    // New model/style props
+    models,
+    styles,
+    selectedModelId,
+    selectedStyleId,
+    onModelChange,
+    onStyleChange,
+    modelsLoading,
+    stylesLoading,
+    // Legacy props
     visualStyle,
     setVisualStyle,
     onUpdateVisualStyle,
@@ -58,6 +78,30 @@ export const PromptsPanel: React.FC<PromptsPanelProps> = ({
     generationProgress,
     onGenerate,
 }) => {
+    // Filter to only image models (video generation happens on storyboard)
+    const imageModels = useMemo(() =>
+        models.filter(m => m.workflowCategory === 'image'),
+        [models]
+    );
+
+    // Filter styles compatible with selected model
+    const compatibleStyles = useMemo(() => {
+        if (!selectedModelId) return styles;
+        return styles.filter(style =>
+            style.compatibleModels.length === 0 ||
+            style.compatibleModels.includes(selectedModelId)
+        );
+    }, [styles, selectedModelId]);
+
+    // Get selected model and style objects for display
+    const selectedModel = useMemo(() =>
+        imageModels.find(m => m.id === selectedModelId),
+        [imageModels, selectedModelId]
+    );
+    const selectedStyle = useMemo(() =>
+        styles.find(s => s.id === selectedStyleId),
+        [styles, selectedStyleId]
+    );
     return (
         <div className="p-8 border-b border-border-color bg-background-dark/40">
             <div className="max-w-4xl mx-auto">
@@ -149,31 +193,73 @@ export const PromptsPanel: React.FC<PromptsPanelProps> = ({
                         </div>
                     </div>
 
-                    {/* Visual Style */}
+                    {/* Generation Model & Visual Style */}
                     <div className="bg-surface-3 border border-border-color rounded-xl p-4 flex flex-col">
                         <div className="flex items-center gap-2 mb-3">
-                            <Icons.ImageIcon size={14} className="text-primary" />
-                            <span className="text-xs font-bold text-white uppercase tracking-wider">Visual Style</span>
+                            <Icons.Cpu size={14} className="text-primary" />
+                            <span className="text-xs font-bold text-white uppercase tracking-wider">Generation Settings</span>
                         </div>
-                        <div className="relative flex-1">
-                            <select
-                                value={visualStyle}
-                                onChange={(e) => {
-                                    setVisualStyle(e.target.value);
-                                    onUpdateVisualStyle(e.target.value);
-                                }}
-                                className="w-full h-full bg-surface-1 border border-border-color rounded-lg pl-4 pr-10 text-sm text-white appearance-none focus:border-primary focus:outline-none cursor-pointer"
-                            >
-                                {VISUAL_STYLES.map((style) => (
-                                    <option key={style} value={style}>
-                                        {style}
-                                    </option>
-                                ))}
-                            </select>
-                            <Icons.ChevronDown
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-                                size={16}
-                            />
+                        <div className="flex flex-col gap-3 flex-1">
+                            {/* Model Dropdown */}
+                            <div>
+                                <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">
+                                    Model
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        value={selectedModelId || ''}
+                                        onChange={(e) => onModelChange(e.target.value)}
+                                        disabled={modelsLoading}
+                                        className="w-full bg-surface-1 border border-border-color rounded-lg pl-4 pr-10 py-2 text-sm text-white appearance-none focus:border-primary focus:outline-none cursor-pointer disabled:opacity-50"
+                                    >
+                                        {modelsLoading ? (
+                                            <option>Loading...</option>
+                                        ) : imageModels.length === 0 ? (
+                                            <option value="">No models available</option>
+                                        ) : (
+                                            imageModels.map((model) => (
+                                                <option key={model.id} value={model.id}>
+                                                    {model.name}
+                                                </option>
+                                            ))
+                                        )}
+                                    </select>
+                                    <Icons.ChevronDown
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+                                        size={16}
+                                    />
+                                </div>
+                            </div>
+                            {/* Style Dropdown */}
+                            <div>
+                                <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">
+                                    Visual Style
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        value={selectedStyleId || ''}
+                                        onChange={(e) => onStyleChange(e.target.value)}
+                                        disabled={stylesLoading}
+                                        className="w-full bg-surface-1 border border-border-color rounded-lg pl-4 pr-10 py-2 text-sm text-white appearance-none focus:border-primary focus:outline-none cursor-pointer disabled:opacity-50"
+                                    >
+                                        {stylesLoading ? (
+                                            <option>Loading...</option>
+                                        ) : compatibleStyles.length === 0 ? (
+                                            <option value="">No styles available</option>
+                                        ) : (
+                                            compatibleStyles.map((style) => (
+                                                <option key={style.id} value={style.id}>
+                                                    {style.name} {style.styleType === 'lora' ? '(LoRA)' : ''}
+                                                </option>
+                                            ))
+                                        )}
+                                    </select>
+                                    <Icons.ChevronDown
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+                                        size={16}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

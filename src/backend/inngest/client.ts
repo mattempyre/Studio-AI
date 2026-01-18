@@ -87,8 +87,14 @@ export type StudioEvents = {
       sentenceId: string;
       projectId: string;
       prompt: string;
-      style: string;
-      characterRefs?: string[];
+      style?: string;                 // Legacy: visual style ID (for backwards compatibility)
+      modelId?: string;               // New: generation model ID from database
+      styleId?: string;               // New: visual style ID from database
+      characterRefs?: string[];       // Character IDs from project cast
+      useImageToImage?: boolean;      // Use img2img workflow with character reference
+      seed?: number;
+      steps?: number;
+      cfg?: number;
     };
   };
   'image/completed': {

@@ -10,6 +10,9 @@ import { healthRouter } from './api/health.js';
 import { scriptsRouter } from './api/scripts.js';
 import { sectionsRouter } from './api/sections.js';
 import { sentencesRouter } from './api/sentences.js';
+import { imagesRouter } from './api/images.js';
+import { modelsRouter } from './api/models.js';
+import { stylesRouter } from './api/styles.js';
 import { inngestHandler } from './api/inngest.js';
 import { inngest } from './inngest/index.js';
 import { setupWebSocket, closeWebSocket, getTotalClients } from './websocket/index.js';
@@ -58,6 +61,11 @@ app.use('/api/v1/sections', sectionsRouter);
 app.use('/api/v1/sentences', sentencesRouter);
 // Scripts routes are nested under projects for context
 app.use('/api/v1/projects', scriptsRouter);
+// Images routes - for image generation with ComfyUI
+app.use('/api/v1', imagesRouter);
+// Generation models and visual styles - for Style Builder
+app.use('/api/v1/models', modelsRouter);
+app.use('/api/v1/styles', stylesRouter);
 
 // Test endpoint to trigger Inngest events (development only)
 if (process.env.NODE_ENV !== 'production') {

@@ -1,5 +1,5 @@
 
-export type ViewState = 'dashboard' | 'script' | 'voiceover' | 'storyboard' | 'video' | 'characters';
+export type ViewState = 'dashboard' | 'script' | 'voiceover' | 'storyboard' | 'video' | 'characters' | 'style-builder';
 
 export interface User {
   id: string;
@@ -52,7 +52,9 @@ export interface BackendProject {
   name: string;
   topic: string | null;
   targetDuration: number;
-  visualStyle: string;
+  modelId: string | null;  // Selected generation model ID
+  styleId: string | null;  // Selected visual style ID
+  visualStyle: string;     // Legacy field, kept for compatibility
   voiceId: string | null;
   status: string;
   sections: BackendSection[];
@@ -105,6 +107,57 @@ export interface CharacterApiResponse {
 export interface CharactersListApiResponse {
   success: boolean;
   data: BackendCharacter[];
+}
+
+// Generation Model types (ComfyUI workflow configurations)
+export interface GenerationModel {
+  id: string;
+  name: string;
+  description: string | null;
+  workflowFile: string | null;
+  workflowCategory: 'image' | 'video';
+  workflowType: 'text-to-image' | 'image-to-image' | 'image-to-video';
+  defaultSteps: number | null;
+  defaultCfg: number | null;
+  defaultFrames: number | null;  // For video models
+  defaultFps: number | null;     // For video models
+  isActive: boolean;
+  createdAt: string | null;
+}
+
+export interface GenerationModelApiResponse {
+  success: boolean;
+  data: GenerationModel;
+}
+
+export interface GenerationModelsListApiResponse {
+  success: boolean;
+  data: GenerationModel[];
+}
+
+// Visual Style types (prompt prefixes and LoRA configurations)
+export interface VisualStyle {
+  id: string;
+  name: string;
+  description: string | null;
+  styleType: 'prompt' | 'lora';
+  promptPrefix: string | null;
+  loraFile: string | null;
+  loraStrength: number | null;
+  compatibleModels: string[];
+  requiresCharacterRef: boolean;
+  isActive: boolean;
+  createdAt: string | null;
+}
+
+export interface VisualStyleApiResponse {
+  success: boolean;
+  data: VisualStyle;
+}
+
+export interface VisualStylesListApiResponse {
+  success: boolean;
+  data: VisualStyle[];
 }
 
 export interface Scene {

@@ -9,6 +9,7 @@ import {
   generateOutlineOnlyFunction,
   generateScriptFunction,
   generateAudioFunction,
+  generateImageFunction,
 } from './functions/index.js';
 
 // All functions to be registered with Inngest
@@ -19,9 +20,8 @@ export const functions = [
   generateOutlineOnlyFunction,
   generateScriptFunction,
   generateAudioFunction,
+  generateImageFunction,
   // Future functions:
-  // generateAudio,
-  // generateImage,
   // generateVideo,
   // exportProject,
 ];

@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS projects (
   name TEXT NOT NULL,
   topic TEXT,
   target_duration INTEGER DEFAULT 8 NOT NULL,
+  model_id TEXT DEFAULT 'z-image-turbo',
+  style_id TEXT DEFAULT 'cinematic',
   visual_style TEXT DEFAULT 'cinematic' NOT NULL,
   voice_id TEXT DEFAULT 'puck',
   status TEXT DEFAULT 'draft' NOT NULL,
@@ -106,6 +108,37 @@ CREATE TABLE IF NOT EXISTS script_outlines (
   created_at INTEGER,
   updated_at INTEGER,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+-- Generation models table (ComfyUI workflow configurations)
+CREATE TABLE IF NOT EXISTS generation_models (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  workflow_file TEXT,
+  workflow_category TEXT DEFAULT 'image' NOT NULL,
+  workflow_type TEXT DEFAULT 'text-to-image' NOT NULL,
+  default_steps INTEGER DEFAULT 4,
+  default_cfg REAL DEFAULT 1.0,
+  default_frames INTEGER,
+  default_fps INTEGER,
+  is_active INTEGER DEFAULT 1 NOT NULL,
+  created_at INTEGER
+);
+
+-- Visual styles table (prompt prefixes and LoRA configurations)
+CREATE TABLE IF NOT EXISTS visual_styles (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  style_type TEXT DEFAULT 'prompt' NOT NULL,
+  prompt_prefix TEXT,
+  lora_file TEXT,
+  lora_strength REAL DEFAULT 1.0,
+  compatible_models TEXT DEFAULT '[]',
+  requires_character_ref INTEGER DEFAULT 0 NOT NULL,
+  is_active INTEGER DEFAULT 1 NOT NULL,
+  created_at INTEGER
 );
 
 -- Generation jobs table

@@ -11,6 +11,7 @@
     "server": "tsx watch src/backend/server.ts",
     "server:build": "tsc -p src/backend/tsconfig.json",
     "db:init": "tsx scripts/init-db.ts",
+    "db:seed": "tsx src/backend/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

@@ -14,6 +14,7 @@ import ScriptEditorV2 from './components/ScriptEditorV2';
 import Storyboard from './components/Storyboard';
 import VideoPreview from './components/VideoPreview';
 import CharacterLibrary from './components/CharacterLibrary';
+import { StyleBuilder } from './components/StyleBuilder';
 import { useAppContext, AppProvider } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { projectsApi } from './services/backendApi';
@@ -218,6 +219,10 @@ function CharacterLibraryPage() {
   return <CharacterLibrary />;
 }
 
+function StyleBuilderPage() {
+  return <StyleBuilder />;
+}
+
 // Route Definitions
 
 const rootRoute = createRootRoute({
@@ -234,6 +239,12 @@ const charactersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/characters',
   component: CharacterLibraryPage,
+});
+
+const styleBuilderRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/style-builder',
+  component: StyleBuilderPage,
 });
 
 const projectRoute = createRoute({
@@ -282,6 +293,7 @@ const catchAllRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   charactersRoute,
+  styleBuilderRoute,
   projectRoute.addChildren([projectIndexRoute, scriptRoute, storyboardRoute, videoRoute]),
   catchAllRoute,
 ]);

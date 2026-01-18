@@ -36,6 +36,18 @@ export interface ImageGenerationParams {
 }
 
 /**
+ * Parameters for image-to-image generation with character reference
+ */
+export interface ImageToImageParams {
+  referenceImage: string;      // Path to character reference image (local filesystem)
+  prompt: string;              // Scene description
+  negativePrompt?: string;
+  seed?: number;
+  steps?: number;              // Default: 20
+  cfg?: number;                // Default: 5
+}
+
+/**
  * Parameters for video generation
  */
 export interface VideoGenerationParams {
@@ -267,11 +279,27 @@ export class ComfyUIClient {
         }
       }
 
+      // PrimitiveStringMultiline nodes (prompt input for some workflows like z-image turbo)
+      if (node.class_type === 'PrimitiveStringMultiline') {
+        const title = node._meta?.title?.toLowerCase() || '';
+        if (title.includes('prompt')) {
+          injections[nodeId] = { value: params.prompt };
+        }
+      }
+
       // EmptyLatentImage nodes (dimensions)
       if (node.class_type === 'EmptyLatentImage') {
         injections[nodeId] = {
           width: params.width ?? 1920,
           height: params.height ?? 1080,
+        };
+      }
+
+      // EmptySD3LatentImage nodes (dimensions for SD3/turbo models)
+      if (node.class_type === 'EmptySD3LatentImage') {
+        injections[nodeId] = {
+          width: params.width ?? 1920,
+          height: params.height ?? 1088,
         };
       }
 
@@ -357,6 +385,164 @@ export class ComfyUIClient {
     }
 
     return this.injectParams(workflow, injections);
+  }
+
+  /**
+   * Prepare a Flux2 Klein image-to-image workflow for character reference generation
+   * This workflow uses ReferenceLatent nodes to condition generation on an input image
+   */
+  prepareImageToImageWorkflow(
+    workflow: ComfyUIWorkflow,
+    params: ImageToImageParams
+  ): ComfyUIWorkflow {
+    const injections: Record<string, Record<string, unknown>> = {};
+
+    for (const [nodeId, node] of Object.entries(workflow)) {
+      // LoadImage node - Reference image (expects just filename in ComfyUI input folder)
+      if (node.class_type === 'LoadImage') {
+        injections[nodeId] = { image: path.basename(params.referenceImage) };
+      }
+
+      // CLIP Text Encode nodes - prompts
+      if (node.class_type === 'CLIPTextEncode') {
+        const title = node._meta?.title?.toLowerCase() || '';
+        if (title.includes('negative')) {
+          injections[nodeId] = { text: params.negativePrompt || '' };
+        } else if (title.includes('positive') || title.includes('prompt')) {
+          injections[nodeId] = { text: params.prompt };
+        }
+      }
+
+      // RandomNoise node - Seed
+      if (node.class_type === 'RandomNoise') {
+        injections[nodeId] = {
+          noise_seed: params.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER),
+        };
+      }
+
+      // Flux2Scheduler node - Steps
+      if (node.class_type === 'Flux2Scheduler') {
+        if (params.steps !== undefined) {
+          injections[nodeId] = { steps: params.steps };
+        }
+      }
+
+      // CFGGuider node - CFG scale
+      if (node.class_type === 'CFGGuider') {
+        if (params.cfg !== undefined) {
+          injections[nodeId] = { cfg: params.cfg };
+        }
+      }
+    }
+
+    return this.injectParams(workflow, injections);
+  }
+
+  /**
+   * Upload an image to ComfyUI input folder for use in workflows
+   * @param localPath - Path to local image file
+   * @param targetFilename - Optional filename in ComfyUI (defaults to basename)
+   * @returns The filename as it exists in ComfyUI's input folder
+   */
+  async uploadImage(localPath: string, targetFilename?: string): Promise<string> {
+    const filename = targetFilename || path.basename(localPath);
+    const imageBuffer = await fs.readFile(localPath);
+
+    // Create form data for multipart upload
+    const boundary = `----WebKitFormBoundary${Date.now().toString(16)}`;
+    const CRLF = '\r\n';
+
+    // Build multipart body manually since Node.js FormData doesn't work with fetch directly
+    const parts: Buffer[] = [];
+
+    // Image file part
+    parts.push(Buffer.from(
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="image"; filename="${filename}"${CRLF}` +
+      `Content-Type: application/octet-stream${CRLF}${CRLF}`
+    ));
+    parts.push(imageBuffer);
+    parts.push(Buffer.from(CRLF));
+
+    // Overwrite flag part
+    parts.push(Buffer.from(
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="overwrite"${CRLF}${CRLF}` +
+      `true${CRLF}`
+    ));
+
+    // Closing boundary
+    parts.push(Buffer.from(`--${boundary}--${CRLF}`));
+
+    const body = Buffer.concat(parts);
+
+    const response = await fetch(`${this.baseUrl}/upload/image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new ComfyUIError(
+        `Failed to upload image: ${response.statusText} - ${text}`,
+        'UPLOAD_ERROR'
+      );
+    }
+
+    const result = await response.json() as { name: string; subfolder: string; type: string };
+    return result.name;
+  }
+
+  /**
+   * Generate an image using image-to-image with character reference
+   */
+  async generateImageWithReference(
+    workflowPath: string,
+    params: ImageToImageParams,
+    outputPath: string,
+    onProgress?: ProgressCallback
+  ): Promise<string> {
+    onProgress?.(0, 'Loading workflow');
+    const workflow = await this.loadWorkflow(workflowPath);
+
+    onProgress?.(5, 'Uploading reference image');
+    // Upload the reference image to ComfyUI's input folder
+    const uploadedFilename = await this.uploadImage(params.referenceImage);
+
+    // Update params with the uploaded filename
+    const updatedParams: ImageToImageParams = {
+      ...params,
+      referenceImage: uploadedFilename,
+    };
+
+    onProgress?.(10, 'Preparing workflow');
+    const prepared = this.prepareImageToImageWorkflow(workflow, updatedParams);
+
+    onProgress?.(15, 'Queueing workflow');
+    const promptId = await this.queueWorkflow(prepared);
+
+    await this.pollProgress(promptId, (progress, message) => {
+      // Scale progress to 15-90 range during execution
+      const scaledProgress = 15 + Math.round(progress * 0.75);
+      onProgress?.(scaledProgress, message);
+    });
+
+    onProgress?.(92, 'Retrieving outputs');
+    const outputs = await this.getJobOutputs(promptId);
+
+    if (outputs.length === 0) {
+      throw new ComfyUIError('No output files generated', 'NO_OUTPUT');
+    }
+
+    onProgress?.(95, 'Downloading file');
+    const output = outputs[0];
+    const savedPath = await this.downloadFile(output.filename, output.subfolder, outputPath);
+
+    onProgress?.(100, 'Complete');
+    return savedPath;
   }
 
   /**

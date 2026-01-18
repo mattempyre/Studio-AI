@@ -5,6 +5,8 @@ import { projectsApi, sectionsApi, sentencesApi, scriptsApi, type GeneratedSente
 import { AIExpansionModal } from './AIExpansionModal';
 import { AIPreviewModal } from './AIPreviewModal';
 import { useCharacters } from '../hooks/useCharacters';
+import { useModels } from '../hooks/useModels';
+import { useStyles } from '../hooks/useStyles';
 import { CharacterFormData } from './CharacterLibrary/CharacterModal';
 
 // Import extracted components and utils
@@ -109,6 +111,21 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     deleteImage,
     refetch: refetchCharacters,
   } = useCharacters();
+
+  // Models and Styles hooks for generation settings
+  const {
+    models,
+    isLoading: modelsLoading,
+  } = useModels();
+
+  const {
+    styles,
+    isLoading: stylesLoading,
+  } = useStyles();
+
+  // Model/Style selection state
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [selectedStyleId, setSelectedStyleId] = useState<string | null>(null);
 
   // Character modal state
   const [isCreatingChar, setIsCreatingChar] = useState(false);
@@ -232,11 +249,14 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
       setTargetDuration(project.targetDuration || 8);
       setVisualStyle(project.visualStyle || 'Cinematic');
       setConcept(project.topic || '');
+      // Set model/style from project, or defaults
+      setSelectedModelId(project.modelId || 'z-image-turbo');
+      setSelectedStyleId(project.styleId || 'cinematic');
     }
   }, [project?.id]);
 
   // Update project settings on backend
-  const handleUpdateProjectSettings = async (updates: { targetDuration?: number; visualStyle?: string; topic?: string }) => {
+  const handleUpdateProjectSettings = async (updates: { targetDuration?: number; visualStyle?: string; topic?: string; modelId?: string; styleId?: string }) => {
     if (!project) return;
 
     try {
@@ -253,6 +273,23 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
       setIsSaving(false);
     }
   };
+
+  // Handle model selection change
+  const handleModelChange = useCallback((modelId: string) => {
+    setSelectedModelId(modelId);
+    handleUpdateProjectSettings({ modelId });
+  }, []);
+
+  // Handle style selection change
+  const handleStyleChange = useCallback((styleId: string) => {
+    setSelectedStyleId(styleId);
+    // Also update legacy visualStyle field for backward compatibility
+    const style = styles.find(s => s.id === styleId);
+    handleUpdateProjectSettings({
+      styleId,
+      visualStyle: style?.name || styleId,
+    });
+  }, [styles]);
 
   // Handle script generation using Deepseek backend API
   // Uses sync API for scripts <=15 min, async Inngest for >15 min
@@ -962,6 +999,16 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
             targetDuration={targetDuration}
             setTargetDuration={setTargetDuration}
             onUpdateTargetDuration={(targetDuration) => handleUpdateProjectSettings({ targetDuration })}
+            // New model/style props
+            models={models}
+            styles={styles}
+            selectedModelId={selectedModelId}
+            selectedStyleId={selectedStyleId}
+            onModelChange={handleModelChange}
+            onStyleChange={handleStyleChange}
+            modelsLoading={modelsLoading}
+            stylesLoading={stylesLoading}
+            // Legacy props
             visualStyle={visualStyle}
             setVisualStyle={setVisualStyle}
             onUpdateVisualStyle={(visualStyle) => handleUpdateProjectSettings({ visualStyle })}

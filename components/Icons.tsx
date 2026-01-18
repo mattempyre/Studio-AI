@@ -48,7 +48,12 @@ import {
   MessageSquare,
   Moon,
   Sun,
-  Users
+  Users,
+  Cpu,
+  Palette,
+  Upload,
+  FileJson,
+  Loader2
 } from 'lucide-react';
 
 export {
@@ -100,5 +105,10 @@ export {
   Zap,
   MessageSquare,
   Moon,
-  Sun
+  Sun,
+  Cpu,
+  Palette,
+  Upload,
+  FileJson,
+  Loader2
 };
