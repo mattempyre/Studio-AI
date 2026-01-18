@@ -1,6 +1,6 @@
 # Story 3.3: Bulk Audio Generation
 
-Status: ready-for-dev
+Status: validated
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -32,46 +32,46 @@ so that **I can proceed efficiently without clicking each one individually**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create bulk audio generation API endpoint (AC: 3, 9, 10)
-  - [ ] 1.1: Add `POST /api/v1/projects/:id/generate-audio` endpoint
-  - [ ] 1.2: Query dirty sentences from project
-  - [ ] 1.3: Queue `audio/generate` events via Inngest
-  - [ ] 1.4: Add `POST /api/v1/projects/:id/cancel-audio` endpoint
-  - [ ] 1.5: Update job status to 'cancelled' for queued jobs
+- [x] Task 1: Create bulk audio generation API endpoint (AC: 3, 9, 10)
+  - [x] 1.1: Add `POST /api/v1/projects/:id/generate-audio` endpoint
+  - [x] 1.2: Query dirty sentences from project
+  - [x] 1.3: Queue `audio/generate` events via Inngest
+  - [x] 1.4: Add `POST /api/v1/projects/:id/cancel-audio` endpoint
+  - [x] 1.5: Update job status to 'cancelled' for queued jobs
 
-- [ ] Task 2: Create useAudioGeneration hook (AC: 4, 5, 11)
-  - [ ] 2.1: Create `hooks/useAudioGeneration.ts`
-  - [ ] 2.2: Integrate with useWebSocket for progress updates
-  - [ ] 2.3: Track generation state (isGenerating, progress, sentenceStatuses)
-  - [ ] 2.4: Implement startGeneration function
-  - [ ] 2.5: Implement cancelGeneration function
+- [x] Task 2: Create useAudioGeneration hook (AC: 4, 5, 11)
+  - [x] 2.1: Create `hooks/useAudioGeneration.ts`
+  - [x] 2.2: Integrate with useWebSocket for progress updates
+  - [x] 2.3: Track generation state (isGenerating, progress, sentenceStatuses)
+  - [x] 2.4: Implement startGeneration function
+  - [x] 2.5: Implement cancelGeneration function
 
-- [ ] Task 3: Create AudioToolbar component (AC: 1, 2, 4, 5, 9, 12)
-  - [ ] 3.1: Create `components/ScriptEditorV2/AudioToolbar.tsx`
-  - [ ] 3.2: Display "Generate All Audio" button with count
-  - [ ] 3.3: Show progress bar during generation
-  - [ ] 3.4: Show cancel button during generation
-  - [ ] 3.5: Display completion toast
+- [x] Task 3: Create AudioToolbar component (AC: 1, 2, 4, 5, 9, 12)
+  - [x] 3.1: Create `components/ScriptEditorV2/AudioToolbar.tsx`
+  - [x] 3.2: Display "Generate All Audio" button with count
+  - [x] 3.3: Show progress bar during generation
+  - [x] 3.4: Show cancel button during generation
+  - [x] 3.5: Display completion toast
 
-- [ ] Task 4: Create SentenceAudioStatus component (AC: 6, 7, 8, 13)
-  - [ ] 4.1: Create `components/ScriptEditorV2/SentenceAudioStatus.tsx`
-  - [ ] 4.2: Show status icons (pending/generating/complete/failed)
-  - [ ] 4.3: Add play/stop button for audio playback
-  - [ ] 4.4: Stop other playing audio when new one starts
-  - [ ] 4.5: Show duration for completed audio
-  - [ ] 4.6: Add retry button for failed sentences
+- [x] Task 4: Create SentenceAudioStatus component (AC: 6, 7, 8, 13)
+  - [x] 4.1: Create `components/ScriptEditorV2/SentenceAudioStatus.tsx`
+  - [x] 4.2: Show status icons (pending/generating/complete/failed)
+  - [x] 4.3: Add play/stop button for audio playback
+  - [x] 4.4: Stop other playing audio when new one starts
+  - [x] 4.5: Show duration for completed audio
+  - [x] 4.6: Add retry button for failed sentences
 
-- [ ] Task 5: Integrate into ScriptEditorV2 (AC: all)
-  - [ ] 5.1: Add AudioToolbar to Header or below it
-  - [ ] 5.2: Add SentenceAudioStatus to SentenceRow
-  - [ ] 5.3: Pass WebSocket events through to components
-  - [ ] 5.4: Test full flow with real Inngest/Chatterbox
+- [x] Task 5: Integrate into ScriptEditorV2 (AC: all)
+  - [x] 5.1: Add AudioToolbar to Header or below it
+  - [x] 5.2: Add SentenceAudioStatus to SentenceRow
+  - [x] 5.3: Pass WebSocket events through to components
+  - [x] 5.4: Test full flow with real Inngest/Chatterbox (verified working)
 
-- [ ] Task 6: Write tests
-  - [ ] 6.1: Unit tests for useAudioGeneration hook
-  - [ ] 6.2: Unit tests for AudioToolbar component
-  - [ ] 6.3: Unit tests for SentenceAudioStatus component
-  - [ ] 6.4: Integration test for bulk generation API
+- [x] Task 6: Write tests
+  - [x] 6.1: Unit tests for useAudioGeneration hook (11 tests)
+  - [x] 6.2: Unit tests for AudioToolbar component (21 tests)
+  - [x] 6.3: Unit tests for SentenceAudioStatus component (24 tests)
+  - [ ] 6.4: Integration test for bulk generation API (pre-existing test infrastructure issues)
   - [ ] 6.5: E2E test for full generation flow (optional)
 
 ## Dev Notes
@@ -166,16 +166,65 @@ Picture Maya, a creator with a 45-sentence script. She's excited about her video
 
 ### Agent Model Used
 
-(To be filled by dev agent)
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
-(To be filled during implementation)
+- Pre-existing TypeScript errors in codebase (unrelated to this story)
+- Pre-existing integration test failures (database connection issues)
+- All tests pass: 56 total (11 hook + 21 AudioToolbar + 24 SentenceAudioStatus)
+- Run hook tests: `npm test -- tests/unit/useAudioGeneration.test.ts`
+- Run component tests: `npm run test:components -- tests/components/ScriptEditorV2/`
+
+### Full Flow Test Results (Task 5.4)
+
+**Test Date:** 2026-01-18
+**Services Used:** Backend (localhost:3001), Inngest (localhost:8288), Chatterbox TTS (localhost:8004)
+
+**Test Steps Verified:**
+1. ✅ Added new sentence to project (triggers dirty audio flag)
+2. ✅ "Generate All Audio" button enabled with count badge showing "1"
+3. ✅ Clicked button → UI showed "Cancel" button and "Generating... 0/1" progress
+4. ✅ Sentence row showed "Generating..." spinner status
+5. ✅ Inngest queued and processed the audio/generate job
+6. ✅ Chatterbox TTS generated 6.2s audio file
+7. ✅ WebSocket broadcast updated UI in real-time
+8. ✅ Progress updated to "1/1" with completed progress bar
+9. ✅ Sentence row showed play button, duration (6.2s), and "NEW" badge
+10. ✅ Success toast appeared: "All audio generation complete!"
+11. ✅ AudioPlayer opened and played the newly generated audio
+12. ✅ Spotify-style footer player with seek, volume, and theme-colored controls
 
 ### Completion Notes List
 
-(To be filled upon completion)
+1. **API Endpoints**: Added `POST /projects/:id/generate-audio` and `POST /projects/:id/cancel-audio` to the projects router
+2. **Hook Implementation**: Created comprehensive useAudioGeneration hook with WebSocket integration for real-time progress
+3. **AudioToolbar**: Displays "Generate All Audio" button with dirty sentence count, progress bar, and cancel functionality
+4. **SentenceAudioStatus**: Shows per-sentence generation status with play button for completed audio
+5. **AudioPlayer**: Added Spotify-style fixed footer audio player with play/pause, seek, volume control, and theme-colored controls
+6. **Integration**: Connected all components through ScriptEditorV2, SectionCard, and SentenceRow
+7. **Static File Serving**: Added `/media/projects` route in server.ts for serving generated audio files
+6. **Tests**: Added comprehensive test suite - 56 tests total, all passing:
+   - useAudioGeneration hook: 11 tests
+   - AudioToolbar component: 21 tests
+   - SentenceAudioStatus component: 24 tests
 
 ### File List
 
-(To be filled with all files created/modified)
+**New Files:**
+- `hooks/useAudioGeneration.ts` - Generation state management hook (240 lines)
+- `components/ScriptEditorV2/AudioToolbar.tsx` - Bulk generation controls (150 lines)
+- `components/ScriptEditorV2/SentenceAudioStatus.tsx` - Per-sentence status display (170 lines)
+- `components/ScriptEditorV2/AudioPlayer.tsx` - Spotify-style footer audio player (350 lines)
+- `tests/unit/useAudioGeneration.test.ts` - Unit tests for hook (310 lines)
+- `tests/components/ScriptEditorV2/AudioToolbar.test.tsx` - Component tests (210 lines)
+- `tests/components/ScriptEditorV2/SentenceAudioStatus.test.tsx` - Component tests (455 lines)
+
+**Modified Files:**
+- `src/backend/api/projects.ts` - Added generate-audio and cancel-audio endpoints (+155 lines)
+- `src/backend/server.ts` - Added static file serving for `/media/projects` (+5 lines)
+- `components/ScriptEditorV2.tsx` - Integrated useAudioGeneration hook, AudioToolbar, and AudioPlayer (+80 lines)
+- `components/ScriptEditorV2/SectionCard.tsx` - Added audio state props (+6 lines)
+- `components/ScriptEditorV2/SentenceRow.tsx` - Added SentenceAudioStatus component (+12 lines)
+- `hooks/index.ts` - Added useAudioGeneration export (+10 lines)
+- `components/Icons.tsx` - Added Play, Pause, SkipBack, SkipForward, XCircle, VolumeX, Volume2 icons (+14 lines)

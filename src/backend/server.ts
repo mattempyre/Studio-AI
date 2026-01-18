@@ -49,6 +49,12 @@ app.use('/uploads/characters', express.static(join(DATA_DIR, 'characters'), {
   immutable: true,
 }));
 
+// Static file serving for generated project media (audio, images, videos)
+const PROJECTS_DIR = process.env.OUTPUT_DIR || join(process.cwd(), 'data', 'projects');
+app.use('/media/projects', express.static(PROJECTS_DIR, {
+  maxAge: '1h', // Cache for 1 hour - regeneration may update files
+}));
+
 // Inngest serve endpoint - handles function registration and invocation
 // This must be registered before other routes to ensure Inngest can reach it
 app.use('/api/v1/inngest', inngestHandler);

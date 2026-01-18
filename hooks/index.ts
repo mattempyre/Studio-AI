@@ -15,3 +15,13 @@ export {
 } from './useWebSocket.js';
 
 export { useCharacters } from './useCharacters.js';
+
+export {
+  useAudioGeneration,
+  type UseAudioGenerationOptions,
+  type UseAudioGenerationReturn,
+  type SentenceAudioState,
+  type SentenceAudioStatus,
+  type BulkGenerationResult,
+  type CancelResult,
+} from './useAudioGeneration.js';

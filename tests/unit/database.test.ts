@@ -62,7 +62,7 @@ describe('Database Operations', () => {
       const result = results[0];
       expect(result?.targetDuration).toBe(8);
       expect(result?.visualStyle).toBe('cinematic');
-      expect(result?.voiceId).toBe('puck');
+      expect(result?.voiceId).toBe('Emily');
       expect(result?.status).toBe('draft');
     });
   });

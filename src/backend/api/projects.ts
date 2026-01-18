@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { db, projects, sections, sentences, projectCast, characters, scriptOutlines, generationJobs, type NewProject } from '../db/index.js';
-import { eq, desc, sql, and } from 'drizzle-orm';
+import { eq, desc, sql, and, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { createProjectSchema, updateProjectSchema, addToCastSchema, addToCastBatchSchema } from '../validation/schemas.js';
 import { deleteProjectMedia } from '../services/outputPaths.js';
+import { inngest } from '../inngest/client.js';
+import { jobService } from '../services/jobService.js';
 
 export const projectsRouter = Router();
 
@@ -70,7 +72,7 @@ projectsRouter.post('/', async (req, res, next) => {
       topic: parsed.data.topic,
       targetDuration: parsed.data.targetDuration ?? 8,
       visualStyle: parsed.data.visualStyle ?? 'cinematic',
-      voiceId: parsed.data.voiceId ?? 'puck',
+      voiceId: parsed.data.voiceId ?? 'Emily',
       status: 'draft',
     };
 
@@ -375,6 +377,159 @@ projectsRouter.delete('/:id', async (req, res, next) => {
 
     // Return 204 No Content on successful delete
     res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/projects/:id/generate-audio - Queue audio generation for all dirty sentences
+projectsRouter.post('/:id/generate-audio', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get all dirty sentences for this project (via sections)
+    const projectSections = await db.select()
+      .from(sections)
+      .where(eq(sections.projectId, id));
+
+    if (projectSections.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_SECTIONS', message: 'Project has no sections' },
+      });
+    }
+
+    const sectionIds = projectSections.map(s => s.id);
+
+    // Get all sentences that are dirty (need audio regeneration)
+    const dirtySentences = await db.select()
+      .from(sentences)
+      .where(and(
+        inArray(sentences.sectionId, sectionIds),
+        eq(sentences.isAudioDirty, true)
+      ))
+      .orderBy(sentences.order);
+
+    if (dirtySentences.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          queued: 0,
+          message: 'All sentences already have up-to-date audio',
+        },
+      });
+    }
+
+    // Filter out sentences with empty text
+    const validSentences = dirtySentences.filter(s => s.text && s.text.trim().length > 0);
+
+    if (validSentences.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          queued: 0,
+          message: 'No sentences with text to generate audio for',
+        },
+      });
+    }
+
+    // Queue audio/generate events for each dirty sentence
+    const queuedJobs: { sentenceId: string; jobId: string }[] = [];
+
+    for (const sentence of validSentences) {
+      // Create job record for tracking
+      const job = await jobService.create({
+        sentenceId: sentence.id,
+        projectId: id,
+        jobType: 'audio',
+      });
+
+      // Queue the Inngest event
+      await inngest.send({
+        name: 'audio/generate',
+        data: {
+          sentenceId: sentence.id,
+          projectId: id,
+          text: sentence.text,
+          voiceId: project.voiceId || 'Emily',
+        },
+      });
+
+      queuedJobs.push({ sentenceId: sentence.id, jobId: job.id });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        queued: queuedJobs.length,
+        total: dirtySentences.length,
+        jobs: queuedJobs,
+        message: `Queued ${queuedJobs.length} audio generation jobs`,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/projects/:id/cancel-audio - Cancel queued audio generation jobs
+projectsRouter.post('/:id/cancel-audio', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get all queued audio jobs for this project
+    const queuedJobs = await db.select()
+      .from(generationJobs)
+      .where(and(
+        eq(generationJobs.projectId, id),
+        eq(generationJobs.jobType, 'audio'),
+        eq(generationJobs.status, 'queued')
+      ));
+
+    if (queuedJobs.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          cancelled: 0,
+          message: 'No queued jobs to cancel',
+        },
+      });
+    }
+
+    // Mark all queued jobs as cancelled (using 'failed' status with cancel message)
+    const cancelledIds: string[] = [];
+
+    for (const job of queuedJobs) {
+      await jobService.markFailed(job.id, 'Cancelled by user');
+      cancelledIds.push(job.id);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        cancelled: cancelledIds.length,
+        jobIds: cancelledIds,
+        message: `Cancelled ${cancelledIds.length} queued jobs`,
+      },
+    });
   } catch (error) {
     next(error);
   }

@@ -9,7 +9,7 @@ export const projects = sqliteTable('projects', {
   modelId: text('model_id').default('z-image-turbo'), // Selected generation model ID
   styleId: text('style_id').default('cinematic'), // Selected visual style ID
   visualStyle: text('visual_style').notNull().default('cinematic'), // Legacy field, kept for compatibility
-  voiceId: text('voice_id').default('puck'), // Selected TTS voice
+  voiceId: text('voice_id').default('Emily'), // Selected TTS voice (Chatterbox)
   status: text('status').notNull().default('draft'), // draft, generating, ready
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),

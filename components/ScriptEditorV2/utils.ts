@@ -61,11 +61,11 @@ export const formatDuration = (mins: number): string => {
     return remaining > 0 ? `${hours}h ${remaining}m` : `${hours}h`;
 };
 
-// Mock Data for Platform Voices
+// Platform Voices - these match the Chatterbox TTS server predefined voices
 export const PLATFORM_VOICES: Voice[] = [
-    { id: 'v_puck', name: 'Puck', category: 'platform', style: 'Energetic', gender: 'Male' },
-    { id: 'v_kore', name: 'Kore', category: 'platform', style: 'Calm & Soothing', gender: 'Female' },
-    { id: 'v_fenrir', name: 'Fenrir', category: 'platform', style: 'Deep & Authoritative', gender: 'Male' },
-    { id: 'v_charon', name: 'Charon', category: 'platform', style: 'Narrative Storyteller', gender: 'Male' },
-    { id: 'v_zephyr', name: 'Zephyr', category: 'platform', style: 'Friendly Assistant', gender: 'Female' },
+    { id: 'Emily', name: 'Emily', category: 'platform', style: 'Calm & Natural', gender: 'Female' },
+    { id: 'Michael', name: 'Michael', category: 'platform', style: 'Confident & Clear', gender: 'Male' },
+    { id: 'Olivia', name: 'Olivia', category: 'platform', style: 'Warm & Friendly', gender: 'Female' },
+    { id: 'Thomas', name: 'Thomas', category: 'platform', style: 'Narrative Storyteller', gender: 'Male' },
+    { id: 'Alexander', name: 'Alexander', category: 'platform', style: 'Deep & Authoritative', gender: 'Male' },
 ];

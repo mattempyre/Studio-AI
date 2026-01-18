@@ -100,7 +100,7 @@ describe('Event Types', () => {
         sentenceId: 'sent-1',
         projectId: 'proj-1',
         text: 'Hello',
-        voiceId: 'puck',
+        voiceId: 'Emily',
       },
     };
 

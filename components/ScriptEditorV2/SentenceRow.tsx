@@ -3,6 +3,8 @@ import * as Icons from '../Icons';
 import { BackendSentence } from '../../types';
 import { debounce, STATUS_COLORS } from './utils';
 import { DirtyIndicator } from './DirtyIndicator';
+import { SentenceAudioStatus } from './SentenceAudioStatus';
+import type { SentenceAudioState } from '../../hooks/useAudioGeneration';
 
 export const SentenceRow: React.FC<{
     sentence: BackendSentence;
@@ -19,6 +21,8 @@ export const SentenceRow: React.FC<{
     onDragEnd: () => void;
     isDragging: boolean;
     isDragOver: boolean;
+    audioState?: SentenceAudioState;
+    onPlayAudio?: (audioUrl: string) => void;
 }> = ({
     sentence,
     index,
@@ -34,6 +38,8 @@ export const SentenceRow: React.FC<{
     onDragEnd,
     isDragging,
     isDragOver,
+    audioState,
+    onPlayAudio,
 }) => {
         const [editText, setEditText] = useState(sentence.text);
         const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -204,12 +210,14 @@ export const SentenceRow: React.FC<{
                                 isImageDirty={sentence.isImageDirty}
                                 isVideoDirty={sentence.isVideoDirty}
                             />
-                            {sentence.audioDuration && (
-                                <span className="text-[10px] text-text-muted flex items-center gap-1">
-                                    <Icons.Clock size={10} />
-                                    {(sentence.audioDuration / 1000).toFixed(1)}s
-                                </span>
-                            )}
+                            {/* Audio status with generation progress */}
+                            <SentenceAudioStatus
+                                audioState={audioState}
+                                isAudioDirty={sentence.isAudioDirty}
+                                existingAudioFile={sentence.audioFile}
+                                existingDuration={sentence.audioDuration}
+                                onPlayAudio={onPlayAudio}
+                            />
                         </div>
                     )}
                 </div>

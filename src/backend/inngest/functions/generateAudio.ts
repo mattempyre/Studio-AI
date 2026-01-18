@@ -14,7 +14,7 @@ export const generateAudioFunction = inngest.createFunction(
         id: 'generate-audio',
         name: 'Generate Audio',
         concurrency: {
-            limit: 4, // CPU-bound (TTS generation)
+            limit: 1, // Chatterbox TTS is single-threaded - only one request at a time
         },
         retries: 3,
     },

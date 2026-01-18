@@ -7,6 +7,7 @@ import { AIPreviewModal } from './AIPreviewModal';
 import { useCharacters } from '../hooks/useCharacters';
 import { useModels } from '../hooks/useModels';
 import { useStyles } from '../hooks/useStyles';
+import { useAudioGeneration } from '../hooks/useAudioGeneration';
 import { CharacterFormData } from './CharacterLibrary/CharacterModal';
 
 // Import extracted components and utils
@@ -26,6 +27,8 @@ import { DirtyIndicator } from './ScriptEditorV2/DirtyIndicator';
 import { Header } from './ScriptEditorV2/Header';
 import { PromptsPanel } from './ScriptEditorV2/PromptsPanel';
 import { Sidebar } from './ScriptEditorV2/Sidebar';
+import { AudioToolbar } from './ScriptEditorV2/AudioToolbar';
+import { AudioPlayer } from './ScriptEditorV2/AudioPlayer';
 
 interface ScriptEditorV2Props {
   projectId: string;
@@ -101,6 +104,10 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   const [isDraggingVoice, setIsDraggingVoice] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Audio player state for footer playbar
+  const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
+  const [currentAudioLabel, setCurrentAudioLabel] = useState<string | undefined>(undefined);
+
   // Character management with useCharacters hook
   const {
     characters: backendCharacters,
@@ -122,6 +129,83 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     styles,
     isLoading: stylesLoading,
   } = useStyles();
+
+  // Audio generation hook for bulk audio generation
+  const {
+    sentenceStates: audioSentenceStates,
+    isGenerating: isAudioGenerating,
+    isLoading: isAudioLoading,
+    totalPending: audioTotalPending,
+    completedCount: audioCompletedCount,
+    failedCount: audioFailedCount,
+    overallProgress: audioOverallProgress,
+    generateAll: generateAllAudio,
+    cancelAll: cancelAllAudio,
+    getSentenceStatus: getAudioSentenceStatus,
+    error: audioError,
+  } = useAudioGeneration(projectId, {
+    onSentenceComplete: useCallback((sentenceId: string, audioFile: string, duration?: number) => {
+      // Update local project state with new audio info
+      setProject(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          sections: prev.sections.map(section => ({
+            ...section,
+            sentences: section.sentences.map(sentence =>
+              sentence.id === sentenceId
+                ? { ...sentence, audioFile, audioDuration: duration || null, isAudioDirty: false }
+                : sentence
+            ),
+          })),
+        };
+      });
+    }, []),
+    onAllComplete: useCallback(() => {
+      setToast({ message: 'All audio generation complete!', type: 'success' });
+    }, []),
+  });
+
+  // Count dirty sentences for audio toolbar
+  const dirtySentenceCount = useMemo(() => {
+    if (!project?.sections) return 0;
+    return project.sections.reduce((count, section) => {
+      return count + (section.sentences?.filter(s => s.isAudioDirty && s.text?.trim()).length || 0);
+    }, 0);
+  }, [project?.sections]);
+
+  // Handle audio playback - opens the footer AudioPlayer
+  // Audio file paths from DB are like "./data/projects/{projectId}/audio/{sentenceId}.wav"
+  // or on Windows: "data\projects\{projectId}\audio\{sentenceId}.wav"
+  // We need to convert to URL: "{API_BASE}/media/projects/{projectId}/audio/{sentenceId}.wav"
+  const handlePlayAudio = useCallback((audioFilePath: string, label?: string) => {
+    // Normalize path separators (Windows backslashes to forward slashes)
+    const normalizedPath = audioFilePath.replace(/\\/g, '/');
+
+    // Convert file path to URL
+    // Path formats: ./data/projects/... or data/projects/...
+    // URL format: {API_BASE}/media/projects/{projectId}/audio/{sentenceId}.wav
+    let audioUrl = normalizedPath;
+
+    // Match various path formats and extract the part after "data/projects/"
+    const match = normalizedPath.match(/(?:\.\/)?data\/projects\/(.+)/);
+    if (match) {
+      audioUrl = `${API_BASE}/media/projects/${match[1]}`;
+    } else if (normalizedPath.startsWith('/')) {
+      // If it's an absolute path starting with /, prepend API_BASE
+      audioUrl = `${API_BASE}${normalizedPath}`;
+    }
+
+    console.log('[Audio] Playing:', audioUrl);
+    setCurrentAudioUrl(audioUrl);
+    setCurrentAudioLabel(label);
+  }, []);
+
+  // Close audio player
+  const handleCloseAudioPlayer = useCallback(() => {
+    setCurrentAudioUrl(null);
+    setCurrentAudioLabel(undefined);
+  }, []);
 
   // Model/Style selection state
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -1030,6 +1114,22 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
                 </h2>
               </div>
 
+              {/* Audio Generation Toolbar */}
+              {(project.sections || []).length > 0 && (
+                <AudioToolbar
+                  isGenerating={isAudioGenerating}
+                  isLoading={isAudioLoading}
+                  dirtySentenceCount={dirtySentenceCount}
+                  totalPending={audioTotalPending}
+                  completedCount={audioCompletedCount}
+                  failedCount={audioFailedCount}
+                  overallProgress={audioOverallProgress}
+                  onGenerateAll={generateAllAudio}
+                  onCancelAll={cancelAllAudio}
+                  error={audioError}
+                />
+              )}
+
               {(project.sections || []).length === 0 ? (
                 <div className="text-center py-16 border-2 border-dashed border-white/10 rounded-2xl">
                   <Icons.FileText className="mx-auto text-text-muted mb-4" size={40} />
@@ -1061,6 +1161,8 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
                       onAddSentence={(afterIndex) => handleAddSentence(section.id, afterIndex)}
                       onReorderSentences={(ids) => handleReorderSentences(section.id, ids)}
                       onAIExpand={(afterSentenceId) => handleOpenAIExpand(section, afterSentenceId)}
+                      getSentenceAudioState={getAudioSentenceStatus}
+                      onPlayAudio={handlePlayAudio}
                     />
                   ))}
 
@@ -1161,6 +1263,13 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
             onRemoveImage={handleRemoveCharacterImage}
           />
         )}
+
+        {/* Fixed footer audio player */}
+        <AudioPlayer
+          audioUrl={currentAudioUrl}
+          onClose={handleCloseAudioPlayer}
+          trackLabel={currentAudioLabel}
+        />
       </div>
     </ScriptEditorErrorBoundary>
   );

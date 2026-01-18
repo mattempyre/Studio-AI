@@ -25,7 +25,7 @@ describe('Inngest Client', () => {
         sentenceId: 'sentence-1',
         projectId: 'project-1',
         text: 'Hello world',
-        voiceId: 'puck',
+        voiceId: 'Emily',
       },
     };
 

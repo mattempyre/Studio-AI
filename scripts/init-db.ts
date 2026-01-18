@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS projects (
   model_id TEXT DEFAULT 'z-image-turbo',
   style_id TEXT DEFAULT 'cinematic',
   visual_style TEXT DEFAULT 'cinematic' NOT NULL,
-  voice_id TEXT DEFAULT 'puck',
+  voice_id TEXT DEFAULT 'Emily',
   status TEXT DEFAULT 'draft' NOT NULL,
   created_at INTEGER,
   updated_at INTEGER

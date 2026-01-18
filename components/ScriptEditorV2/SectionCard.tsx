@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as Icons from '../Icons';
 import { BackendSection } from '../../types';
 import { SentenceRow } from './SentenceRow';
+import type { SentenceAudioState } from '../../hooks/useAudioGeneration';
 
 export const SectionCard: React.FC<{
     section: BackendSection;
@@ -15,6 +16,8 @@ export const SectionCard: React.FC<{
     onAddSentence: (afterIndex?: number) => void;
     onReorderSentences: (sentenceIds: string[]) => void;
     onAIExpand: (afterSentenceId?: string) => void;
+    getSentenceAudioState?: (sentenceId: string) => SentenceAudioState | undefined;
+    onPlayAudio?: (audioUrl: string) => void;
 }> = ({
     section,
     sectionIndex,
@@ -27,6 +30,8 @@ export const SectionCard: React.FC<{
     onAddSentence,
     onReorderSentences,
     onAIExpand,
+    getSentenceAudioState,
+    onPlayAudio,
 }) => {
         const [isEditingTitle, setIsEditingTitle] = useState(false);
         const [titleInput, setTitleInput] = useState(section.title);
@@ -235,6 +240,8 @@ export const SectionCard: React.FC<{
                                             onDragEnd={handleSentenceDragEnd}
                                             isDragging={draggedSentenceIndex === index}
                                             isDragOver={dragOverIndex === index}
+                                            audioState={getSentenceAudioState?.(sentence.id)}
+                                            onPlayAudio={onPlayAudio}
                                         />
                                     </React.Fragment>
                                 ))}

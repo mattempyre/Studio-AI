@@ -66,10 +66,10 @@ development_status:
   epic-2-retrospective: optional
 
   # EPIC-03: Voice Generation (STORY-014 to STORY-016)
-  epic-3: in-progress
+  epic-3: done
   3-1-audio-generation-job: done
   3-2-voice-selection-ui: done
-  3-3-bulk-audio-generation: ready-for-dev
+  3-3-bulk-audio-generation: dev-complete
   epic-3-retrospective: optional
 
   # EPIC-04: Image Generation

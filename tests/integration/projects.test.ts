@@ -123,7 +123,7 @@ describe('Projects API', () => {
 
       expect(response.body.data.targetDuration).toBe(8);
       expect(response.body.data.visualStyle).toBe('cinematic');
-      expect(response.body.data.voiceId).toBe('puck');
+      expect(response.body.data.voiceId).toBe('Emily');
     });
 
     it('should return 400 when name is missing', async () => {
