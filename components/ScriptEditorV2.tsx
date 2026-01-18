@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import * as Icons from './Icons';
 import type { BackendProject, BackendSection, BackendSentence, Character, Voice, BackendCharacter } from '../types';
-import { projectsApi, sectionsApi, sentencesApi, scriptsApi, type GeneratedSentence, type AIExpandResult } from '../services/backendApi';
+import { projectsApi, sectionsApi, sentencesApi, scriptsApi, type GeneratedSentence, type AIExpandResult, type GenerationProgressEvent } from '../services/backendApi';
 import { AIExpansionModal } from './AIExpansionModal';
 import { AIPreviewModal } from './AIPreviewModal';
 import { useCharacters } from '../hooks/useCharacters';
@@ -56,6 +56,17 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   const [visualStyle, setVisualStyle] = useState('Cinematic');
   const [useSearch, setUseSearch] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // Async generation progress state (for scripts >15 min)
+  const [generationProgress, setGenerationProgress] = useState<{
+    isActive: boolean;
+    currentSection: number;
+    totalSections: number;
+    currentSectionTitle: string;
+    percentComplete: number;
+    sectionsCompleted: string[];
+  } | null>(null);
+  const progressCleanupRef = useRef<(() => void) | null>(null);
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
@@ -244,65 +255,168 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   };
 
   // Handle script generation using Deepseek backend API
+  // Uses sync API for scripts <=15 min, async Inngest for >15 min
   const handleGenerateScript = async () => {
     if (!project || !concept.trim()) return;
 
     const currentProjectId = project.id;
+    const useAsyncGeneration = targetDuration > 15;
 
     try {
       setIsGenerating(true);
-      console.log('[ScriptEditor] Starting script generation for project:', currentProjectId);
+      console.log('[ScriptEditor] Starting script generation for project:', currentProjectId,
+        useAsyncGeneration ? '(async via Inngest)' : '(sync)');
 
-      // Call backend API to generate script (uses Deepseek)
-      await scriptsApi.quickGenerate(currentProjectId, {
-        topic: concept,
-        targetDurationMinutes: targetDuration,
-        visualStyle: visualStyle.toLowerCase(),
-        useSearchGrounding: useSearch,
-      });
+      if (useAsyncGeneration) {
+        // Long-form generation via Inngest (>15 min)
+        const jobResult = await scriptsApi.generateLong(currentProjectId, {
+          topic: concept,
+          targetDurationMinutes: targetDuration,
+          visualStyle: visualStyle.toLowerCase(),
+          mode: 'auto',
+        });
 
-      console.log('[ScriptEditor] Script generation completed, fetching updated project...');
+        console.log('[ScriptEditor] Long-form job started:', jobResult.jobId);
 
-      // Reload the project to get the newly generated sections/sentences
-      const updatedProject = await projectsApi.get(currentProjectId);
-      console.log('[ScriptEditor] Received updated project:', {
-        id: updatedProject?.id,
-        sectionCount: updatedProject?.sections?.length,
-        sentenceCount: updatedProject?.sections?.reduce((acc, s) => acc + (s.sentences?.length || 0), 0),
-      });
+        // Initialize progress state
+        setGenerationProgress({
+          isActive: true,
+          currentSection: 0,
+          totalSections: jobResult.totalSections,
+          currentSectionTitle: 'Starting...',
+          percentComplete: 0,
+          sectionsCompleted: [],
+        });
 
-      // Validate the project data structure before updating state
-      if (!updatedProject || !updatedProject.id) {
-        console.error('[ScriptEditor] Invalid project data received:', updatedProject);
-        throw new Error('Invalid project data received from server');
+        // Track completed section count to detect new completions
+        let lastCompletedCount = 0;
+
+        // Subscribe to SSE progress updates
+        const cleanup = scriptsApi.subscribeToProgress(currentProjectId, {
+          onProgress: async (data) => {
+            console.log('[ScriptEditor] Generation progress:', data);
+            setGenerationProgress({
+              isActive: true,
+              currentSection: data.currentSection || 0,
+              totalSections: data.totalSections || jobResult.totalSections,
+              currentSectionTitle: data.currentSectionTitle || 'Generating...',
+              percentComplete: data.percentComplete || 0,
+              sectionsCompleted: data.sectionsCompleted || [],
+            });
+
+            // Refetch project data when a new section completes
+            // This makes sections appear progressively as they're generated
+            const completedCount = data.sectionsCompleted?.length || 0;
+            if (completedCount > lastCompletedCount) {
+              lastCompletedCount = completedCount;
+              console.log('[ScriptEditor] New section completed, refetching project data...');
+              try {
+                const updatedProject = await projectsApi.get(currentProjectId);
+                const normalizedProject: BackendProject = {
+                  ...updatedProject,
+                  sections: (updatedProject.sections || []).map(section => ({
+                    ...section,
+                    sentences: section.sentences || [],
+                  })),
+                };
+                setProject(normalizedProject);
+              } catch (err) {
+                console.error('[ScriptEditor] Failed to refetch project during progress:', err);
+              }
+            }
+          },
+          onComplete: async (data) => {
+            console.log('[ScriptEditor] Generation complete:', data);
+            setGenerationProgress(null);
+            progressCleanupRef.current = null;
+
+            // Reload the project to get the generated content
+            const updatedProject = await projectsApi.get(currentProjectId);
+            const normalizedProject: BackendProject = {
+              ...updatedProject,
+              sections: (updatedProject.sections || []).map(section => ({
+                ...section,
+                sentences: section.sentences || [],
+              })),
+            };
+            setProject(normalizedProject);
+            setIsGenerating(false);
+            setToast({ message: `Script generated: ${data.totalSections} sections, ${data.totalSentences} sentences!`, type: 'success' });
+            setTimeout(() => setToast(null), 5000);
+          },
+          onError: (error) => {
+            console.error('[ScriptEditor] Generation error:', error);
+            setGenerationProgress(null);
+            progressCleanupRef.current = null;
+            setIsGenerating(false);
+            setToast({ message: `Generation failed: ${error}`, type: 'error' });
+            setTimeout(() => setToast(null), 8000);
+          },
+        });
+
+        progressCleanupRef.current = cleanup;
+        // Note: isGenerating stays true until onComplete/onError
+
+      } else {
+        // Short-form generation (<=15 min) - synchronous
+        await scriptsApi.quickGenerate(currentProjectId, {
+          topic: concept,
+          targetDurationMinutes: targetDuration,
+          visualStyle: visualStyle.toLowerCase(),
+          useSearchGrounding: useSearch,
+        });
+
+        console.log('[ScriptEditor] Script generation completed, fetching updated project...');
+
+        // Reload the project to get the newly generated sections/sentences
+        const updatedProject = await projectsApi.get(currentProjectId);
+        console.log('[ScriptEditor] Received updated project:', {
+          id: updatedProject?.id,
+          sectionCount: updatedProject?.sections?.length,
+          sentenceCount: updatedProject?.sections?.reduce((acc, s) => acc + (s.sentences?.length || 0), 0),
+        });
+
+        // Validate the project data structure before updating state
+        if (!updatedProject || !updatedProject.id) {
+          console.error('[ScriptEditor] Invalid project data received:', updatedProject);
+          throw new Error('Invalid project data received from server');
+        }
+
+        // Ensure sections and sentences arrays are always defined
+        const normalizedProject: BackendProject = {
+          ...updatedProject,
+          sections: (updatedProject.sections || []).map(section => ({
+            ...section,
+            sentences: section.sentences || [],
+          })),
+        };
+
+        console.log('[ScriptEditor] Setting normalized project with', normalizedProject.sections.length, 'sections');
+
+        setProject(normalizedProject);
+        setToast({ message: 'Script generated successfully!', type: 'success' });
+        setTimeout(() => setToast(null), 5000);
+        setIsGenerating(false);
       }
-
-      // Ensure sections and sentences arrays are always defined
-      const normalizedProject: BackendProject = {
-        ...updatedProject,
-        sections: (updatedProject.sections || []).map(section => ({
-          ...section,
-          sentences: section.sentences || [],
-        })),
-      };
-
-      console.log('[ScriptEditor] Setting normalized project with', normalizedProject.sections.length, 'sections');
-
-      // Directly update state - no setTimeout needed
-      // React will batch these updates properly
-      setProject(normalizedProject);
-      setToast({ message: 'Script generated successfully!', type: 'success' });
-      setTimeout(() => setToast(null), 5000);
 
     } catch (err) {
       console.error('[ScriptEditor] Failed to generate script:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setToast({ message: `Failed to generate script: ${errorMessage}`, type: 'error' });
       setTimeout(() => setToast(null), 8000);
-    } finally {
       setIsGenerating(false);
+      setGenerationProgress(null);
     }
   };
+
+  // Cleanup SSE subscription on unmount
+  useEffect(() => {
+    return () => {
+      if (progressCleanupRef.current) {
+        progressCleanupRef.current();
+      }
+    };
+  }, []);
 
   // Update section title
   const handleUpdateSectionTitle = async (sectionId: string, title: string) => {
@@ -855,6 +969,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
             useSearch={useSearch}
             setUseSearch={setUseSearch}
             isGenerating={isGenerating}
+            generationProgress={generationProgress}
             onGenerate={handleGenerateScript}
           />
 

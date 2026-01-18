@@ -179,8 +179,10 @@ export const generateLongScriptFunction = inngest.createFunction(
     for (let i = startIndex; i < outline.outline.sections.length; i++) {
       const section = outline.outline.sections[i];
 
-      // Generate section content
-      const generatedSection = await step.run(`generate-section-${i}`, async () => {
+      // Generate and save section content in a single step
+      // IMPORTANT: We minimize step return data to avoid Inngest payload limits
+      // Large data (sentences, prompts) is saved to DB, only minimal refs are returned
+      const sectionResult = await step.run(`process-section-${i}`, async () => {
         console.log(`[LongScript] Generating section ${i}: ${section.title}`);
 
         // Update job progress
@@ -220,13 +222,9 @@ export const generateLongScriptFunction = inngest.createFunction(
         };
 
         // Generate the section
-        const result = await client.generateSectionWithContext(context);
-        return result;
-      });
+        const generatedSection = await client.generateSectionWithContext(context);
 
-      // Save section to database
-      const dbSection = await step.run(`save-section-${i}`, async () => {
-        // Create section record
+        // Save section to database immediately (don't return large data)
         const sectionId = nanoid();
         const newSection: NewSection = {
           id: sectionId,
@@ -254,11 +252,6 @@ export const generateLongScriptFunction = inngest.createFunction(
           await db.insert(sentences).values(sentenceRecords);
         }
 
-        return { sectionId, sentenceCount: sentenceRecords.length };
-      });
-
-      // Update memory (summary and covered topics)
-      const memoryUpdate = await step.run(`update-memory-${i}`, async () => {
         // Compress summary with new section content
         const newSummary = await client.compressSummary(
           runningSummary,
@@ -269,9 +262,8 @@ export const generateLongScriptFunction = inngest.createFunction(
         // Extract new covered topics
         const newTopics = await client.extractCoveredTopics(generatedSection);
 
-        // Get last sentence for continuity
-        const lastSentence = generatedSection.sentences[generatedSection.sentences.length - 1];
-        const ending = lastSentence?.text || '';
+        // Get last sentence for continuity (just the text, not the whole object)
+        const lastSentenceText = generatedSection.sentences[generatedSection.sentences.length - 1]?.text || '';
 
         // Update outline with new memory state
         await db.update(scriptOutlines)
@@ -282,15 +274,29 @@ export const generateLongScriptFunction = inngest.createFunction(
           })
           .where(eq(scriptOutlines.id, outline.id));
 
-        return { newSummary, newTopics, ending };
+        // Return ONLY minimal data needed for next iteration
+        // This avoids Inngest payload size limits by not storing full sentence content
+        return {
+          sectionId,
+          sectionTitle: generatedSection.title,
+          sentenceCount: sentenceRecords.length,
+          durationMinutes: generatedSection.durationMinutes,
+          // Memory state for next iteration (kept small)
+          newSummary,
+          newTopics,
+          lastSentenceText,
+        };
       });
 
-      // Update loop variables
-      runningSummary = memoryUpdate.newSummary;
-      coveredTopics = [...coveredTopics, ...memoryUpdate.newTopics];
-      previousSectionEnding = memoryUpdate.ending;
-      totalSentences += dbSection.sentenceCount;
-      totalDuration += generatedSection.durationMinutes;
+      // Update loop variables from minimal step result
+      // SAFETY: Limit summary to 2000 chars and topics to last 50 to avoid payload bloat
+      runningSummary = sectionResult.newSummary.slice(0, 2000);
+      // Keep only the most recent topics to prevent unbounded growth
+      const allTopics = [...coveredTopics, ...sectionResult.newTopics];
+      coveredTopics = allTopics.slice(-50); // Keep last 50 topics max
+      previousSectionEnding = sectionResult.lastSentenceText.slice(0, 500);
+      totalSentences += sectionResult.sentenceCount;
+      totalDuration += sectionResult.durationMinutes;
 
       // Emit section completed event
       await step.run(`emit-section-complete-${i}`, async () => {
@@ -300,8 +306,8 @@ export const generateLongScriptFunction = inngest.createFunction(
             projectId,
             outlineId: outline.id,
             sectionIndex: i,
-            sectionTitle: generatedSection.title,
-            sentenceCount: dbSection.sentenceCount,
+            sectionTitle: sectionResult.sectionTitle,
+            sentenceCount: sectionResult.sentenceCount,
           },
         });
 
