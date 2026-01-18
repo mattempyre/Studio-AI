@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as Icons from './Icons';
 import { Project, Scene } from '../types';
 import { generateImage, generateVideo } from '../services/geminiService';
+import { Button } from './ui/button';
 
 interface StoryboardProps {
   project: Project;
@@ -121,10 +122,10 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
       {/* Sidebar - Scene List */}
       <aside className="w-72 flex flex-col border-r border-border-color bg-[#0d0b1a] overflow-y-auto custom-scrollbar flex-shrink-0">
         <div className="p-4 border-b border-white/5">
-          <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold transition-all">
+          <Button variant="outline" className="w-full">
             <Icons.Wand2 size={16} />
             Generate Scenes From Script
-          </button>
+          </Button>
         </div>
         
         <div className="p-4 flex flex-col gap-6">
@@ -412,14 +413,15 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                     />
                                     <button className="absolute bottom-2 right-2 text-text-muted hover:text-white"><Icons.Wand2 size={14}/></button>
                                 </div>
-                                <button 
+                                <Button
+                                    variant="outline"
+                                    className="w-full mt-3"
                                     onClick={handleRegenerateImage}
                                     disabled={generatingImages.has(activeScene.id)}
-                                    className="w-full mt-3 py-2 bg-white/5 border border-white/10 hover:border-primary/50 hover:bg-primary/10 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
-                                    {generatingImages.has(activeScene.id) ? <Icons.RefreshCw className="animate-spin" size={14}/> : <Icons.RefreshCw size={14} />} 
+                                    {generatingImages.has(activeScene.id) ? <Icons.RefreshCw className="animate-spin" size={14}/> : <Icons.RefreshCw size={14} />}
                                     {generatingImages.has(activeScene.id) ? 'Generating...' : 'Regenerate Image'}
-                                </button>
+                                </Button>
                             </div>
 
                             <div className="space-y-3">
@@ -478,14 +480,14 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                 <input type="range" className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer" />
                             </div>
                             
-                            <button 
+                            <Button
+                                className="w-full"
                                 onClick={handleGenerateVideo}
                                 disabled={generatingVideos.has(activeScene.id)}
-                                className="w-full py-3 bg-primary text-white rounded-lg text-[11px] font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {generatingVideos.has(activeScene.id) ? <Icons.RefreshCw className="animate-spin" size={16}/> : <Icons.Video size={16} />}
                                 {generatingVideos.has(activeScene.id) ? 'GENERATING VIDEO...' : 'GENERATE VIDEO'}
-                            </button>
+                            </Button>
                             {activeScene.videoUrl && (
                                 <p className="text-[10px] text-green-400 font-bold text-center mt-2 flex items-center justify-center gap-1">
                                     <Icons.CheckCircle size={10}/> Video Generated
@@ -498,12 +500,9 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
         )}
 
         <div className="p-6 mt-auto border-t border-white/5 bg-background-dark/50">
-            <button 
-                onClick={onNext}
-                className="w-full py-3 bg-gradient-to-r from-primary to-purple-600 rounded-xl text-xs font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-all uppercase tracking-wider"
-            >
+            <Button size="lg" className="w-full" onClick={onNext}>
                 Preview Full Video
-            </button>
+            </Button>
         </div>
       </aside>
     </div>

@@ -24,7 +24,6 @@ interface LayoutProps {
 
 const CREATION_STEPS = [
   { id: 'script', label: 'Script & Audio' },
-  { id: 'cast', label: 'Cast' },
   { id: 'storyboard', label: 'Storyboard' },
   { id: 'video', label: 'Video Editor' },
 ];
@@ -235,7 +234,6 @@ const Layout: React.FC<LayoutProps> = ({
             <div className="pt-2 border-t border-white/5">
               {[
                 { id: 'script', icon: Icons.Type, label: 'Script & Audio', path: 'script' },
-                { id: 'cast', icon: Icons.Users, label: 'Cast & Characters', path: 'cast' },
                 { id: 'storyboard', icon: Icons.Grid, label: 'Storyboard', path: 'storyboard' },
                 { id: 'video', icon: Icons.Film, label: 'Video Editor', path: 'video' },
               ].map((item) => {

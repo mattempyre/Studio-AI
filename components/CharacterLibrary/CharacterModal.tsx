@@ -3,6 +3,7 @@ import * as Icons from '../Icons';
 import { BackendCharacter } from '../../types';
 import ImageUploader from './ImageUploader';
 import DeleteConfirmation from './DeleteConfirmation';
+import { Button } from '../ui/button';
 
 const MAX_IMAGES = 5;
 const MAX_SIZE_MB = 5;
@@ -419,31 +420,24 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
           <div className="p-6 border-t border-border-subtle bg-surface-1/50">
             <div className="flex items-center gap-3">
               {isEditing && onDelete && (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="px-4 py-2.5 text-error hover:text-error/80 hover:bg-error/10 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
+                  className="text-error hover:text-error/80 hover:bg-error/10"
                 >
                   <Icons.Trash2 size={16} />
                   Delete
-                </button>
+                </Button>
               )}
 
               <div className="flex-1" />
 
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-2.5 text-text-muted hover:text-text-primary hover:bg-surface-3 rounded-lg text-sm font-bold transition-colors"
-              >
+              <Button variant="ghost" type="button" onClick={onClose}>
                 Cancel
-              </button>
+              </Button>
 
-              <button
-                onClick={handleSubmit}
-                disabled={isSaving}
-                className="px-5 py-2.5 bg-primary text-text-primary rounded-lg text-sm font-bold hover:bg-primary-hover disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
-              >
+              <Button onClick={handleSubmit} disabled={isSaving}>
                 {isSaving ? (
                   <>
                     <Icons.RefreshCw className="animate-spin" size={16} />
@@ -455,7 +449,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                     {isEditing ? 'Save Changes' : 'Create Character'}
                   </>
                 )}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

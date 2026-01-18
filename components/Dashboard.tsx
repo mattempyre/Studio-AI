@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { MOCK_TEMPLATES } from '../constants';
 import * as Icons from './Icons';
 import { User } from '../types';
+import { Button } from './ui/button';
 
 // Dashboard project type from backend
 interface DashboardProject {
@@ -136,15 +137,16 @@ const Dashboard: React.FC<DashboardProps> = ({
           </h3>
           <div className="flex items-center gap-4">
             {onRefresh && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={onRefresh}
-                className="text-text-muted text-sm font-bold hover:text-white transition-colors flex items-center gap-1"
               >
                 <Icons.RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
                 Refresh
-              </button>
+              </Button>
             )}
-            <button className="text-text-muted text-sm font-bold hover:text-white transition-colors">View All</button>
+            <Button variant="ghost" size="sm">View All</Button>
           </div>
         </div>
 
@@ -156,12 +158,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="text-center py-12 border border-dashed border-white/10 rounded-xl bg-white/5">
             <Icons.FolderOpen className="mx-auto text-text-muted mb-4" size={40} />
             <p className="text-text-muted mb-4">No projects yet. Start creating!</p>
-            <button
-              onClick={handleCreateProject}
-              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors"
-            >
+            <Button onClick={handleCreateProject}>
               Create Your First Project
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -220,7 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <Icons.LayoutDashboard className="text-primary" size={20} />
             Start from Template
           </h3>
-          <button className="text-primary text-sm font-bold hover:underline">View all templates</button>
+          <Button variant="link" className="text-primary">View all templates</Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

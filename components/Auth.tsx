@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import * as Icons from './Icons';
 import { User } from '../types';
+import { Button } from './ui/button';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -79,25 +80,18 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
           </div>
 
-          <button 
-            type="submit" 
-            disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 mt-2"
-          >
+          <Button type="submit" size="lg" className="w-full mt-2" disabled={isLoading}>
             {isLoading && <Icons.RefreshCw className="animate-spin" size={16} />}
             {isLogin ? 'Sign In' : 'Create Account'}
-          </button>
+          </Button>
         </form>
 
         <div className="mt-6 pt-6 border-t border-white/5 text-center">
           <p className="text-text-muted text-sm">
             {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-white font-bold hover:text-primary transition-colors"
-            >
+            <Button variant="link" onClick={() => setIsLogin(!isLogin)}>
               {isLogin ? 'Sign Up' : 'Log In'}
-            </button>
+            </Button>
           </p>
         </div>
       </div>

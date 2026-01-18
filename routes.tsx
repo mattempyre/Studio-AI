@@ -14,7 +14,6 @@ import ScriptEditorV2 from './components/ScriptEditorV2';
 import Storyboard from './components/Storyboard';
 import VideoPreview from './components/VideoPreview';
 import CharacterLibrary from './components/CharacterLibrary';
-import CastPanel from './components/ProjectSettings/CastPanel';
 import { useAppContext, AppProvider } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { projectsApi } from './services/backendApi';
@@ -214,39 +213,6 @@ function VideoPreviewPage() {
   return <VideoPreview project={project} onUpdateProject={handleProjectUpdate} />;
 }
 
-function CastPage() {
-  const { projectId } = castRoute.useParams();
-  const [project, setProject] = useState<BackendProject | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const loadProject = async () => {
-    try {
-      setIsLoading(true);
-      const p = await projectsApi.get(projectId);
-      setProject(p);
-    } catch (err) {
-      console.error("Failed to load project", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (projectId) loadProject();
-  }, [projectId]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full bg-background-dark text-white">
-        Loading project data...
-      </div>
-    );
-  }
-
-  if (!project) return <Navigate to="/" />;
-
-  return <CastPanel project={project} onUpdate={loadProject} />;
-}
 
 function CharacterLibraryPage() {
   return <CharacterLibrary />;
@@ -279,12 +245,6 @@ const scriptRoute = createRoute({
   getParentRoute: () => projectRoute,
   path: '/script',
   component: ScriptEditorPage,
-});
-
-const castRoute = createRoute({
-  getParentRoute: () => projectRoute,
-  path: '/cast',
-  component: CastPage,
 });
 
 const storyboardRoute = createRoute({
@@ -322,7 +282,7 @@ const catchAllRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   charactersRoute,
-  projectRoute.addChildren([projectIndexRoute, scriptRoute, castRoute, storyboardRoute, videoRoute]),
+  projectRoute.addChildren([projectIndexRoute, scriptRoute, storyboardRoute, videoRoute]),
   catchAllRoute,
 ]);
 

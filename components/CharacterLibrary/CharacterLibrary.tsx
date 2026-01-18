@@ -5,6 +5,7 @@ import { useCharacters } from '../../hooks/useCharacters';
 import CharacterGrid from './CharacterGrid';
 import CharacterModal, { CharacterFormData } from './CharacterModal';
 import DeleteConfirmation from './DeleteConfirmation';
+import { Button } from '../ui/button';
 
 // Loading skeleton for grid items
 const LoadingGrid: React.FC = () => (
@@ -29,13 +30,10 @@ const ErrorState: React.FC<{ error: Error; onRetry: () => void }> = ({ error, on
     <p className="text-text-muted text-center mb-6 max-w-md">
       {error.message || 'An unexpected error occurred while loading your character library.'}
     </p>
-    <button
-      onClick={onRetry}
-      className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
-    >
+    <Button onClick={onRetry}>
       <Icons.RefreshCw size={16} />
       Try Again
-    </button>
+    </Button>
   </div>
 );
 
@@ -49,13 +47,10 @@ const EmptyState: React.FC<{ onCreate: () => void }> = ({ onCreate }) => (
     <p className="text-text-muted text-center mb-6 max-w-md">
       Build your character library to maintain visual consistency across your video projects.
     </p>
-    <button
-      onClick={onCreate}
-      className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
-    >
+    <Button size="lg" onClick={onCreate}>
       <Icons.Plus size={18} />
       Create Your First Character
-    </button>
+    </Button>
   </div>
 );
 
@@ -260,13 +255,10 @@ export const CharacterLibrary: React.FC = () => {
           </div>
 
           {!isLoading && !error && characters.length > 0 && (
-            <button
-              onClick={() => setIsCreating(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
-            >
+            <Button onClick={() => setIsCreating(true)}>
               <Icons.Plus size={18} />
               New Character
-            </button>
+            </Button>
           )}
         </div>
       </div>

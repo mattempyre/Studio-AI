@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as Icons from '../Icons';
+import { Button } from '../ui/button';
 
 interface DeleteConfirmationProps {
   characterName: string;
@@ -87,18 +88,20 @@ export const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
 
           {/* Actions */}
           <div className="flex gap-3">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              className="flex-1"
               onClick={onCancel}
               disabled={isDeleting}
-              className="flex-1 py-3 rounded-xl text-sm font-bold text-text-muted hover:text-white hover:bg-white/5 border border-white/10 transition-colors disabled:opacity-50"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="destructive"
+              className="flex-1"
               disabled={!canDelete || isDeleting}
-              className="flex-1 py-3 rounded-xl text-sm font-bold bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 disabled:hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
             >
               {isDeleting ? (
                 <>
@@ -111,7 +114,7 @@ export const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
                   Delete
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

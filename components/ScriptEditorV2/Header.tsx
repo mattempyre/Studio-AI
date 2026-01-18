@@ -1,5 +1,6 @@
 import React from 'react';
 import * as Icons from '../Icons';
+import { Button } from '../ui/button';
 
 interface HeaderProps {
     isEditingName: boolean;
@@ -55,14 +56,16 @@ export const Header: React.FC<HeaderProps> = ({
                                 {displayName}
                             </h1>
                             {onUpdateProjectName && (
-                                <button
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
                                     onClick={onClickName}
-                                    className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-primary transition-all p-1"
+                                    className="opacity-0 group-hover:opacity-100"
                                     title="Rename Project"
                                     aria-label="Rename project"
                                 >
                                     <Icons.Edit3 size={14} />
-                                </button>
+                                </Button>
                             )}
                         </div>
                     )}
@@ -79,13 +82,10 @@ export const Header: React.FC<HeaderProps> = ({
                             Saving...
                         </span>
                     )}
-                    <button
-                        onClick={onNext}
-                        className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
-                    >
+                    <Button onClick={onNext}>
                         Continue to Storyboard
                         <Icons.ChevronRight size={16} />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>
