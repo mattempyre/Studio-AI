@@ -256,7 +256,34 @@ export interface QuickGenerateResult {
   estimatedDurationMinutes: number;
 }
 
+// Async generation job result (Inngest)
+export interface GenerateJobResult {
+  jobId: string;
+  status: 'queued';
+  totalSections: number;
+  estimatedDurationSeconds: number;
+}
+
+// SSE progress event types
+export interface GenerationProgressEvent {
+  type: 'connected' | 'progress' | 'complete' | 'error';
+  data: {
+    projectId?: string;
+    jobId?: string;
+    status?: string;
+    currentSection?: number;
+    totalSections?: number;
+    currentSectionTitle?: string;
+    percentComplete?: number;
+    sectionsCompleted?: string[];
+    totalSentences?: number;
+    totalDurationMinutes?: number;
+    error?: string;
+  };
+}
+
 export const scriptsApi = {
+  // Synchronous generation for short scripts (blocks until complete)
   quickGenerate: async (
     projectId: string,
     data: {
@@ -272,5 +299,86 @@ export const scriptsApi = {
       body: JSON.stringify(data),
     });
     return handleResponse(response);
+  },
+
+  // Async generation for long scripts (>15 min) - returns immediately with jobId
+  generateLong: async (
+    projectId: string,
+    data: {
+      topic: string;
+      targetDurationMinutes: number;
+      visualStyle?: string;
+      mode?: 'auto' | 'from-outline';
+      outlineId?: string;
+    }
+  ): Promise<GenerateJobResult> => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/generate-script`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: data.mode || 'auto',
+        topic: data.topic,
+        targetDurationMinutes: data.targetDurationMinutes,
+        visualStyle: data.visualStyle,
+        outlineId: data.outlineId,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  // Subscribe to generation progress via SSE
+  subscribeToProgress: (
+    projectId: string,
+    callbacks: {
+      onProgress?: (data: GenerationProgressEvent['data']) => void;
+      onComplete?: (data: GenerationProgressEvent['data']) => void;
+      onError?: (error: string) => void;
+    }
+  ): (() => void) => {
+    const eventSource = new EventSource(`${API_BASE}/projects/${projectId}/generation-status`);
+
+    eventSource.addEventListener('connected', (e) => {
+      console.log('[SSE] Connected to generation status stream');
+    });
+
+    eventSource.addEventListener('progress', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        callbacks.onProgress?.(data);
+      } catch (err) {
+        console.error('[SSE] Failed to parse progress event:', err);
+      }
+    });
+
+    eventSource.addEventListener('complete', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        callbacks.onComplete?.(data);
+        eventSource.close();
+      } catch (err) {
+        console.error('[SSE] Failed to parse complete event:', err);
+      }
+    });
+
+    eventSource.addEventListener('error', (e) => {
+      // Check if this is an SSE error event with data
+      if (e instanceof MessageEvent && e.data) {
+        try {
+          const data = JSON.parse(e.data);
+          callbacks.onError?.(data.error || 'Unknown error');
+        } catch {
+          callbacks.onError?.('Connection error');
+        }
+      } else {
+        // Connection error
+        callbacks.onError?.('Connection lost');
+      }
+      eventSource.close();
+    });
+
+    // Return cleanup function
+    return () => {
+      eventSource.close();
+    };
   },
 };

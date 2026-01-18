@@ -139,8 +139,15 @@ export type StudioEvents = {
   };
 };
 
+// Get dev server URL from environment for local development
+const isDev = process.env.NODE_ENV !== 'production';
+const baseUrl = process.env.INNGEST_DEV_SERVER || 'http://localhost:8288';
+
 // Create the Inngest client with typed events
 export const inngest = new Inngest({
   id: 'videogen-ai-studio',
   schemas: new EventSchemas().fromRecord<StudioEvents>(),
+  // In development, tell Inngest to send events to the local dev server
+  // baseUrl is required for inngest.send() to know where to deliver events
+  ...(isDev && { isDev: true, baseUrl }),
 });

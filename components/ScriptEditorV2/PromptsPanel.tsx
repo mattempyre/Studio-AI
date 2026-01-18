@@ -3,6 +3,16 @@ import * as Icons from '../Icons';
 import { Character } from '../../types';
 import { VISUAL_STYLES, DURATION_PRESETS, formatDuration } from './utils';
 
+// Generation progress state for long-form scripts
+export interface GenerationProgress {
+    isActive: boolean;
+    currentSection: number;
+    totalSections: number;
+    currentSectionTitle: string;
+    percentComplete: number;
+    sectionsCompleted: string[];
+}
+
 interface PromptsPanelProps {
     charactersCount: number;
     showRightPanel: boolean;
@@ -22,6 +32,7 @@ interface PromptsPanelProps {
     useSearch: boolean;
     setUseSearch: (use: boolean) => void;
     isGenerating: boolean;
+    generationProgress?: GenerationProgress | null;
     onGenerate: () => void;
 }
 
@@ -44,6 +55,7 @@ export const PromptsPanel: React.FC<PromptsPanelProps> = ({
     useSearch,
     setUseSearch,
     isGenerating,
+    generationProgress,
     onGenerate,
 }) => {
     return (
@@ -186,6 +198,48 @@ export const PromptsPanel: React.FC<PromptsPanelProps> = ({
                     </div>
                 )}
 
+                {/* Generation Progress Bar (for long-form scripts) */}
+                {generationProgress?.isActive && (
+                    <div className="mb-4 bg-surface-3 border border-primary/30 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                                <Icons.RefreshCw className="animate-spin text-primary" size={14} />
+                                <span className="text-xs font-bold text-white">
+                                    Generating Long-Form Script
+                                </span>
+                            </div>
+                            <span className="text-xs text-text-muted">
+                                Section {generationProgress.currentSection} of {generationProgress.totalSections}
+                            </span>
+                        </div>
+                        <div className="mb-2">
+                            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-gradient-to-r from-primary to-purple-500 transition-all duration-500"
+                                    style={{ width: `${generationProgress.percentComplete}%` }}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-primary font-medium">
+                                {generationProgress.currentSectionTitle}
+                            </span>
+                            <span className="text-[10px] text-text-muted">
+                                {generationProgress.percentComplete}% complete
+                            </span>
+                        </div>
+                        {generationProgress.sectionsCompleted.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                                {generationProgress.sectionsCompleted.map((title, i) => (
+                                    <span key={i} className="text-[9px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
+                                        ✓ {title}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -199,6 +253,12 @@ export const PromptsPanel: React.FC<PromptsPanelProps> = ({
                             <Icons.Globe size={14} />
                             {useSearch ? 'Google Search Enabled' : 'Enable Search Grounding'}
                         </button>
+                        {targetDuration > 15 && !isGenerating && (
+                            <span className="text-[10px] text-amber-400/80 flex items-center gap-1">
+                                <Icons.Clock size={12} />
+                                Long-form (async)
+                            </span>
+                        )}
                     </div>
 
                     <div className="flex gap-3">
