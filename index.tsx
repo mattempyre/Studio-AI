@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import { router } from './routes';
+import './src/styles/globals.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
