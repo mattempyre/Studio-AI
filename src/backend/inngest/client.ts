@@ -185,6 +185,27 @@ export type StudioEvents = {
     };
   };
 
+  // Image editing events (inpainting)
+  'image/edit': {
+    data: {
+      sentenceId: string;
+      projectId: string;
+      sourceImagePath: string;      // Path to original image to edit
+      editPrompt: string;           // Prompt describing desired changes
+      editMode: 'full' | 'inpaint'; // Full image edit or selective (masked) edit
+      maskImageBase64?: string;     // Base64 PNG with red channel mask (for inpaint mode)
+      seed?: number;
+      steps?: number;
+    };
+  };
+  'image/edit-completed': {
+    data: {
+      sentenceId: string;
+      projectId: string;
+      imageFile: string;            // Path to edited image
+    };
+  };
+
   // Batch image generation (model-aware batching to minimize model reloads)
   'image/generate-batch': {
     data: {

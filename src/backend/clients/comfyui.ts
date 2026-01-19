@@ -48,6 +48,19 @@ export interface ImageToImageParams {
 }
 
 /**
+ * Parameters for inpainting (image editing with mask)
+ * Uses Flux2 Klein 9B Inpainting workflow
+ */
+export interface InpaintParams {
+  sourceImage: string;         // Path to source image to edit
+  maskImage: string;           // Path to mask PNG (red channel = edit area)
+  prompt: string;              // Description of desired changes
+  negativePrompt?: string;
+  seed?: number;
+  steps?: number;              // Default: 4 (LanPaint KSampler)
+}
+
+/**
  * Parameters for video generation
  */
 export interface VideoGenerationParams {
@@ -527,6 +540,128 @@ export class ComfyUIClient {
     await this.pollProgress(promptId, (progress, message) => {
       // Scale progress to 15-90 range during execution
       const scaledProgress = 15 + Math.round(progress * 0.75);
+      onProgress?.(scaledProgress, message);
+    });
+
+    onProgress?.(92, 'Retrieving outputs');
+    const outputs = await this.getJobOutputs(promptId);
+
+    if (outputs.length === 0) {
+      throw new ComfyUIError('No output files generated', 'NO_OUTPUT');
+    }
+
+    onProgress?.(95, 'Downloading file');
+    const output = outputs[0];
+    const savedPath = await this.downloadFile(output.filename, output.subfolder, outputPath);
+
+    onProgress?.(100, 'Complete');
+    return savedPath;
+  }
+
+  /**
+   * Prepare inpainting workflow with source image, mask, and prompt
+   * Uses Flux2 Klein 9B Inpainting workflow with LanPaint KSampler
+   *
+   * Node mapping for flux2_klein_9b_Inpainting.json:
+   * - Node 151 (EditImage): LoadImage for source image
+   * - Node 163 (MaskImage): LoadImage for mask (red channel)
+   * - Node 107 (CLIP Text Encode (Positive Prompt)): Edit prompt
+   * - Node 156 (LanPaint KSampler): seed, steps
+   */
+  prepareInpaintWorkflow(
+    workflow: ComfyUIWorkflow,
+    params: InpaintParams
+  ): ComfyUIWorkflow {
+    const injections: Record<string, Record<string, unknown>> = {};
+
+    for (const [nodeId, node] of Object.entries(workflow)) {
+      const title = node._meta?.title?.toLowerCase() || '';
+
+      // LoadImage nodes - EditImage and MaskImage
+      if (node.class_type === 'LoadImage') {
+        if (title.includes('editimage') || title === 'editimage') {
+          injections[nodeId] = { image: path.basename(params.sourceImage) };
+        } else if (title.includes('maskimage') || title === 'maskimage') {
+          injections[nodeId] = { image: path.basename(params.maskImage) };
+        }
+      }
+
+      // CLIP Text Encode nodes - prompts
+      if (node.class_type === 'CLIPTextEncode') {
+        if (title.includes('negative')) {
+          injections[nodeId] = { text: params.negativePrompt || '' };
+        } else if (title.includes('positive') || title.includes('prompt')) {
+          injections[nodeId] = { text: params.prompt };
+        }
+      }
+
+      // LanPaint_KSampler node - seed, steps
+      if (node.class_type === 'LanPaint_KSampler') {
+        const updates: Record<string, unknown> = {};
+        if (params.seed !== undefined) {
+          updates.seed = params.seed;
+        }
+        if (params.steps !== undefined) {
+          updates.steps = params.steps;
+        }
+        if (Object.keys(updates).length > 0) {
+          injections[nodeId] = updates;
+        }
+      }
+
+      // KSampler fallback (if workflow uses standard sampler)
+      if (node.class_type === 'KSampler' || node.class_type === 'KSamplerAdvanced') {
+        const updates: Record<string, unknown> = {};
+        if (params.seed !== undefined) {
+          updates.seed = params.seed;
+        }
+        if (params.steps !== undefined) {
+          updates.steps = params.steps;
+        }
+        if (Object.keys(updates).length > 0) {
+          injections[nodeId] = updates;
+        }
+      }
+    }
+
+    return this.injectParams(workflow, injections);
+  }
+
+  /**
+   * Generate an edited image using inpainting workflow
+   * Uploads both source image and mask to ComfyUI
+   */
+  async generateInpaint(
+    workflowPath: string,
+    params: InpaintParams,
+    outputPath: string,
+    onProgress?: ProgressCallback
+  ): Promise<string> {
+    onProgress?.(0, 'Loading workflow');
+    const workflow = await this.loadWorkflow(workflowPath);
+
+    onProgress?.(5, 'Uploading source image');
+    const uploadedSourceFilename = await this.uploadImage(params.sourceImage);
+
+    onProgress?.(10, 'Uploading mask image');
+    const uploadedMaskFilename = await this.uploadImage(params.maskImage);
+
+    // Update params with uploaded filenames
+    const updatedParams: InpaintParams = {
+      ...params,
+      sourceImage: uploadedSourceFilename,
+      maskImage: uploadedMaskFilename,
+    };
+
+    onProgress?.(15, 'Preparing workflow');
+    const prepared = this.prepareInpaintWorkflow(workflow, updatedParams);
+
+    onProgress?.(20, 'Queueing workflow');
+    const promptId = await this.queueWorkflow(prepared);
+
+    await this.pollProgress(promptId, (progress, message) => {
+      // Scale progress to 20-90 range during execution
+      const scaledProgress = 20 + Math.round(progress * 0.7);
       onProgress?.(scaledProgress, message);
     });
 

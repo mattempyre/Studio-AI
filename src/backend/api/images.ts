@@ -188,6 +188,111 @@ imagesRouter.post('/sentences/:sentenceId/generate-image', async (req: Request, 
   }
 });
 
+// Validation schema for edit-image endpoint
+const editImageSchema = z.object({
+  editPrompt: z.string().min(1, 'Edit prompt is required'),
+  editMode: z.enum(['full', 'inpaint']),
+  maskImage: z.string().optional(), // Base64 PNG for inpaint mode
+  seed: z.number().optional(),
+  steps: z.number().min(1).max(50).optional(),
+});
+
+/**
+ * POST /api/v1/sentences/:sentenceId/edit-image
+ * Trigger image editing (inpainting) for a single sentence using ComfyUI
+ * Uses Flux2 Klein 9B Inpainting workflow
+ */
+imagesRouter.post('/sentences/:sentenceId/edit-image', async (req: Request, res: Response, next) => {
+  try {
+    const sentenceId = req.params.sentenceId as string;
+
+    // Validate request body
+    const parsed = editImageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => e.message).join(', '),
+        },
+      });
+    }
+
+    const { editPrompt, editMode, maskImage, seed, steps } = parsed.data;
+
+    // Validate that inpaint mode has a mask
+    if (editMode === 'inpaint' && !maskImage) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Mask image is required for inpaint mode',
+        },
+      });
+    }
+
+    // Get sentence and verify it exists and has an image
+    const sentence = await db.select().from(sentences).where(eq(sentences.id, sentenceId)).get();
+    if (!sentence) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Sentence not found' },
+      });
+    }
+
+    if (!sentence.imageFile) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_IMAGE', message: 'Sentence does not have an image to edit' },
+      });
+    }
+
+    // Get section to find project
+    const section = await db.select().from(sections).where(eq(sections.id, sentence.sectionId)).get();
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Section not found' },
+      });
+    }
+
+    const projectId = section.projectId;
+
+    // Create job record
+    const job = await jobService.create({
+      sentenceId,
+      projectId,
+      jobType: 'image',
+    });
+
+    // Trigger Inngest event for image editing
+    await inngest.send({
+      name: 'image/edit',
+      data: {
+        sentenceId,
+        projectId,
+        sourceImagePath: sentence.imageFile,
+        editPrompt,
+        editMode,
+        maskImageBase64: maskImage,
+        seed,
+        steps,
+      },
+    });
+
+    res.status(202).json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: 'queued',
+        message: 'Image edit started',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /**
  * GET /api/v1/sentences/:sentenceId/image-status
  * Get the status of image generation for a sentence

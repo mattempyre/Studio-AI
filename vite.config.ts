@@ -8,10 +8,23 @@ export default defineConfig(({ mode }) => {
     // Support custom port via VITE_PORT for worktree development
     const port = env.VITE_PORT ? parseInt(env.VITE_PORT, 10) : 3000;
 
+    // Backend server port (default 3001, or from env)
+    const backendPort = env.PORT ? parseInt(env.PORT, 10) : 3001;
+
     return {
       server: {
         port,
         host: '0.0.0.0',
+        proxy: {
+          '/api/v1': {
+            target: `http://localhost:${backendPort}`,
+            changeOrigin: true,
+          },
+          '/media': {
+            target: `http://localhost:${backendPort}`,
+            changeOrigin: true,
+          },
+        },
       },
       plugins: [react(), tailwindcss()],
       define: {

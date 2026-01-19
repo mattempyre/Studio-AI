@@ -21,6 +21,7 @@ import {
   Copy,
   Trash2,
   RefreshCw,
+  RotateCcw,
   Grid,
   List,
   Maximize2,
@@ -60,7 +61,9 @@ import {
   Upload,
   FileJson,
   Loader2,
-  Camera
+  Camera,
+  Circle,
+  Eraser
 } from 'lucide-react';
 
 export {
@@ -85,6 +88,7 @@ export {
   Copy,
   Trash2,
   RefreshCw,
+  RotateCcw,
   Grid,
   List,
   Maximize2,
@@ -124,5 +128,7 @@ export {
   Upload,
   FileJson,
   Loader2,
-  Camera
+  Camera,
+  Circle,
+  Eraser
 };

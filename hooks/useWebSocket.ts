@@ -126,6 +126,29 @@ export function useWebSocket(
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentProjectId = useRef<string | null>(projectId);
 
+  // Refs for callbacks - prevents reconnection when callbacks change
+  const onProgressRef = useRef(onProgress);
+  const onJobCompleteRef = useRef(onJobComplete);
+  const onJobFailedRef = useRef(onJobFailed);
+  const onEventRef = useRef(onEvent);
+
+  // Update callback refs when they change (without triggering reconnection)
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+  }, [onProgress]);
+
+  useEffect(() => {
+    onJobCompleteRef.current = onJobComplete;
+  }, [onJobComplete]);
+
+  useEffect(() => {
+    onJobFailedRef.current = onJobFailed;
+  }, [onJobFailed]);
+
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
   // Update ref when projectId changes
   useEffect(() => {
     currentProjectId.current = projectId;
@@ -201,20 +224,20 @@ export function useWebSocket(
 
             case 'progress':
               setLastEvent(message as ProgressEvent);
-              onProgress?.(message as ProgressEvent);
-              onEvent?.(message as ProgressEvent);
+              onProgressRef.current?.(message as ProgressEvent);
+              onEventRef.current?.(message as ProgressEvent);
               break;
 
             case 'job_complete':
               setLastEvent(message as JobCompleteEvent);
-              onJobComplete?.(message as JobCompleteEvent);
-              onEvent?.(message as JobCompleteEvent);
+              onJobCompleteRef.current?.(message as JobCompleteEvent);
+              onEventRef.current?.(message as JobCompleteEvent);
               break;
 
             case 'job_failed':
               setLastEvent(message as JobFailedEvent);
-              onJobFailed?.(message as JobFailedEvent);
-              onEvent?.(message as JobFailedEvent);
+              onJobFailedRef.current?.(message as JobFailedEvent);
+              onEventRef.current?.(message as JobFailedEvent);
               break;
 
             case 'error':
@@ -262,7 +285,7 @@ export function useWebSocket(
       console.error('[WebSocket] Failed to create connection:', error);
       setStatus('error');
     }
-  }, [clearReconnectTimeout, subscribeToProject, onProgress, onJobComplete, onJobFailed, onEvent]);
+  }, [clearReconnectTimeout, subscribeToProject]);
 
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {

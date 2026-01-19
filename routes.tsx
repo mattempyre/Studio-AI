@@ -192,27 +192,38 @@ function StoryboardPage() {
   /**
    * Convert a file path to a proper media URL.
    * Handles both new format (/media/projects/...) and legacy format (data/projects/...).
+   * Optionally adds a cache-busting timestamp parameter.
    */
-  const toMediaUrl = (filePath: string | null | undefined): string | undefined => {
+  const toMediaUrl = (filePath: string | null | undefined, cacheBuster?: string | Date | null): string | undefined => {
     if (!filePath) return undefined;
+
+    let url: string;
 
     // Already a media URL
     if (filePath.startsWith('/media/')) {
-      return `${API_BASE}${filePath}`;
+      url = `${API_BASE}${filePath}`;
+    } else {
+      // Legacy filesystem path - convert to media URL
+      // Normalize backslashes to forward slashes
+      const normalized = filePath.replace(/\\/g, '/');
+
+      // Extract the part after 'projects/'
+      const projectsMatch = normalized.match(/projects\/(.+)$/);
+      if (projectsMatch) {
+        url = `${API_BASE}/media/projects/${projectsMatch[1]}`;
+      } else {
+        // Fallback - try to use as-is
+        url = `${API_BASE}${filePath}`;
+      }
     }
 
-    // Legacy filesystem path - convert to media URL
-    // Normalize backslashes to forward slashes
-    const normalized = filePath.replace(/\\/g, '/');
-
-    // Extract the part after 'projects/'
-    const projectsMatch = normalized.match(/projects\/(.+)$/);
-    if (projectsMatch) {
-      return `${API_BASE}/media/projects/${projectsMatch[1]}`;
+    // Add cache-busting parameter if provided
+    if (cacheBuster) {
+      const timestamp = cacheBuster instanceof Date ? cacheBuster.getTime() : new Date(cacheBuster).getTime();
+      url = `${url}?t=${timestamp}`;
     }
 
-    // Fallback - try to use as-is
-    return `${API_BASE}${filePath}`;
+    return url;
   };
 
   // Load project data from backend
@@ -244,13 +255,14 @@ function StoryboardPage() {
   const handleImageComplete = (sentenceId: string, imageFile: string) => {
     setBackendProject((prev) => {
       if (!prev) return prev;
+      // Update imageFile, status, and updatedAt (for cache busting)
       return {
         ...prev,
         sections: prev.sections.map((section) => ({
           ...section,
           sentences: section.sentences.map((sentence) =>
             sentence.id === sentenceId
-              ? { ...sentence, imageFile, status: 'completed' as const }
+              ? { ...sentence, imageFile, status: 'completed' as const, updatedAt: new Date().toISOString() }
               : sentence
           ),
         })),
@@ -262,13 +274,14 @@ function StoryboardPage() {
   const handleVideoComplete = (sentenceId: string, videoFile: string) => {
     setBackendProject((prev) => {
       if (!prev) return prev;
+      // Update videoFile, status, and updatedAt (for cache busting)
       return {
         ...prev,
         sections: prev.sections.map((section) => ({
           ...section,
           sentences: section.sentences.map((sentence) =>
             sentence.id === sentenceId
-              ? { ...sentence, videoFile, status: 'completed' as const }
+              ? { ...sentence, videoFile, status: 'completed' as const, updatedAt: new Date().toISOString() }
               : sentence
           ),
         })),
@@ -308,6 +321,7 @@ function StoryboardPage() {
 
   // Transform backend data to Project format for Storyboard component
   // Flatten all sentences from all sections into scenes
+  // Use updatedAt as cache buster to force browser to reload images when they change
   const scenes = backendProject.sections.flatMap((section) =>
     section.sentences.map((sentence) => ({
       id: sentence.id,
@@ -316,8 +330,8 @@ function StoryboardPage() {
       narration: sentence.text,
       imagePrompt: sentence.imagePrompt || '',
       videoPrompt: sentence.videoPrompt || undefined,
-      imageUrl: toMediaUrl(sentence.imageFile),
-      videoUrl: toMediaUrl(sentence.videoFile),
+      imageUrl: toMediaUrl(sentence.imageFile, sentence.updatedAt),
+      videoUrl: toMediaUrl(sentence.videoFile, sentence.updatedAt),
       cameraMovement: sentence.cameraMovement || 'static',
       visualStyle: backendProject.visualStyle || 'cinematic',
     }))

@@ -1,10 +1,14 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as Icons from './Icons';
 import { Project, Scene } from '../types';
-import { generateImage, generateVideo } from '../services/geminiService';
+import { generateVideo } from '../services/geminiService';
 import { Button } from './ui/button';
 import { BulkGenerationToolbar } from './Storyboard/BulkGenerationToolbar';
+import { ImageEditModal } from './Storyboard/ImageEditModal';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const JOB_POLL_INTERVAL = 2000; // 2 seconds
 
 interface StoryboardProps {
   project: Project;
@@ -26,6 +30,10 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
   const [generatingVideos, setGeneratingVideos] = useState<Set<string>>(new Set());
   // Track expanded prompts by scene ID (format: "sceneId-image" or "sceneId-video")
   const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
+  // Image edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  // Track jobIds for regenerating images (sceneId -> jobId)
+  const [regeneratingJobs, setRegeneratingJobs] = useState<Map<string, string>>(new Map());
 
   const togglePromptExpanded = (sceneId: string, type: 'image' | 'video') => {
     const key = `${sceneId}-${type}`;
@@ -70,9 +78,69 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
     }
   }, [project.scenes, selectedSceneId]);
 
-  // NOTE: Auto-generation disabled - image generation now happens via backend Inngest/ComfyUI pipeline
-  // The Storyboard UI will be updated in Epic 6 to integrate with backend image generation
-  // For now, images should be generated via the API and will display when imageUrl is set
+  // Helper to handle image generation completion
+  const handleImageCompleteInternal = useCallback((sceneId: string, imageFile: string) => {
+    // Clear generating state
+    setGeneratingImages(prev => {
+      const next = new Set(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    // Clear job tracking
+    setRegeneratingJobs(prev => {
+      const next = new Map(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    // Call parent's onImageComplete which updates backendProject state in routes.tsx
+    // This triggers a re-render with the new imageUrl (with cache-busting timestamp)
+    onImageComplete?.(sceneId, imageFile);
+  }, [onImageComplete]);
+
+  // Helper to handle image generation failure
+  const handleImageFailed = useCallback((sceneId: string, error: string) => {
+    setGeneratingImages(prev => {
+      const next = new Set(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    setRegeneratingJobs(prev => {
+      const next = new Map(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    console.error(`Image generation failed for ${sceneId}:`, error);
+  }, []);
+
+  // Poll for job completion (single image regeneration)
+  useEffect(() => {
+    if (regeneratingJobs.size === 0) return;
+
+    const pollJobStatus = async () => {
+      for (const [sceneId, jobId] of regeneratingJobs) {
+        try {
+          const response = await fetch(`${API_BASE}/api/v1/jobs/${jobId}`);
+          if (!response.ok) continue;
+
+          const data = await response.json();
+          const job = data.data;
+
+          if (job.status === 'completed' && job.resultFile) {
+            handleImageCompleteInternal(sceneId, job.resultFile);
+          } else if (job.status === 'failed') {
+            handleImageFailed(sceneId, job.errorMessage || 'Image generation failed');
+          }
+        } catch (err) {
+          console.error('Failed to poll job status:', err);
+        }
+      }
+    };
+
+    // Poll immediately, then at intervals
+    pollJobStatus();
+    const intervalId = setInterval(pollJobStatus, JOB_POLL_INTERVAL);
+    return () => clearInterval(intervalId);
+  }, [regeneratingJobs, handleImageCompleteInternal, handleImageFailed]);
 
   const activeScene = project.scenes.find(s => s.id === selectedSceneId) || project.scenes[0];
 
@@ -83,9 +151,47 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
       onUpdateProject({ ...project, scenes: updatedScenes });
   };
 
-  // Trigger regeneration by clearing the image URL, which fires the effect above
-  const handleRegenerateImage = () => {
-      updateScene('imageUrl', '');
+  // Regenerate image for the active scene using backend ComfyUI API
+  const handleRegenerateImage = async () => {
+      if (!activeScene || generatingImages.has(activeScene.id)) return;
+
+      const sceneId = activeScene.id;
+      setGeneratingImages(prev => new Set(prev).add(sceneId));
+      try {
+          const prompt = activeScene.imagePrompt || activeScene.narration;
+          const response = await fetch(`${API_BASE}/api/v1/sentences/${sceneId}/generate-image`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  prompt,
+                  style: activeScene.visualStyle || 'z-image-turbo',
+                  useImageToImage: false, // Use text-to-image for regeneration
+              }),
+          });
+
+          if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ error: { message: 'Request failed' } }));
+              throw new Error(errorData.error?.message || 'Failed to start image generation');
+          }
+
+          // Get jobId from response for polling fallback
+          const result = await response.json();
+          const jobId = result.data?.jobId;
+          if (jobId) {
+              setRegeneratingJobs(prev => new Map(prev).set(sceneId, jobId));
+          }
+
+          // Job is queued - WebSocket or polling will handle completion
+      } catch (e) {
+          console.error("Image generation failed", e);
+          alert(`Failed to generate image: ${e instanceof Error ? e.message : 'Unknown error'}`);
+          // Only clear generating state on error - success is handled by WebSocket/polling
+          setGeneratingImages(prev => {
+              const next = new Set(prev);
+              next.delete(sceneId);
+              return next;
+          });
+      }
   };
 
   const handleGenerateVideo = async () => {
@@ -530,6 +636,15 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                     {generatingImages.has(activeScene.id) ? <Icons.RefreshCw className="animate-spin" size={14}/> : <Icons.RefreshCw size={14} />}
                                     {generatingImages.has(activeScene.id) ? 'Generating...' : 'Regenerate Image'}
                                 </Button>
+                                <Button
+                                    variant="outline"
+                                    className="w-full mt-2"
+                                    onClick={() => setIsEditModalOpen(true)}
+                                    disabled={!activeScene.imageUrl || generatingImages.has(activeScene.id)}
+                                >
+                                    <Icons.Edit3 size={14} />
+                                    Edit Image
+                                </Button>
                             </div>
 
                             <div className="space-y-3">
@@ -613,6 +728,22 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
             </Button>
         </div>
       </aside>
+
+      {/* Image Edit Modal */}
+      {activeScene && (
+        <ImageEditModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          imageUrl={activeScene.imageUrl || ''}
+          imagePrompt={activeScene.imagePrompt}
+          sceneId={activeScene.id}
+          projectId={project.id}
+          onEditComplete={(newImageUrl) => {
+            // Update the scene with the new image URL
+            updateScene('imageUrl', newImageUrl);
+          }}
+        />
+      )}
     </div>
   );
 };

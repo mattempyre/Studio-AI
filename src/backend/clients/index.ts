@@ -6,6 +6,8 @@ export {
   type ComfyUIClientOptions,
   type ComfyUIWorkflow,
   type ImageGenerationParams,
+  type ImageToImageParams,
+  type InpaintParams,
   type VideoGenerationParams,
   type ProgressCallback,
 } from './comfyui.js';
