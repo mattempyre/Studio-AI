@@ -137,6 +137,34 @@ export interface GeneratedImagePromptResult {
   }>;
 }
 
+// Video prompt generation types
+export interface VideoPromptSentence {
+  id: string;
+  index: number;
+  text: string;
+  sectionTitle: string;
+  imagePrompt: string | null;
+}
+
+export interface VideoPromptGenerationOptions {
+  sentences: VideoPromptSentence[];
+  styleContext?: {
+    name: string;
+    promptPrefix: string | null;
+  };
+  castCharacters?: Array<{
+    name: string;
+    description: string | null;
+  }>;
+}
+
+export interface GeneratedVideoPromptResult {
+  prompts: Array<{
+    index: number;
+    videoPrompt: string;
+  }>;
+}
+
 interface DeepseekMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -443,7 +471,7 @@ OUTPUT FORMAT (JSON only):
     {
       "text": "The narration text for this sentence.",
       "imagePrompt": "A detailed image prompt in ${context.visualStyle} style.",
-      "videoPrompt": "Brief motion description (pan, zoom, etc.)"
+      "videoPrompt": "Subject action with physical details, environmental effects present. Camera movement type capturing focal point."
     }
   ]
 }
@@ -455,6 +483,10 @@ GUIDELINES:
 - Cover ALL key points for this section
 - End with a smooth transition to the next section (unless this is the last section)
 - Image prompts should match the ${context.visualStyle} visual style
+- Video prompts follow Wan 2.2 format (30-80 words): Subject Action + Environmental Effects + Camera Movement
+  - Include physical details (muscle tension, facial expressions, gestures)
+  - Add environmental context (wind, light quality, particles)
+  - End with specific camera movement describing what it captures
 - Output ONLY valid JSON, no markdown or explanation`;
   }
 
@@ -612,7 +644,7 @@ You MUST respond with a valid JSON object following this exact structure:
         {
           "text": "The narration text for this sentence.",
           "imagePrompt": "A detailed image prompt describing the visual for this sentence.",
-          "videoPrompt": "A brief motion description for video generation."
+          "videoPrompt": "Subject action with physical details, environmental effects. Camera movement capturing focal point."
         }
       ]
     }
@@ -623,7 +655,11 @@ GUIDELINES:
 - Each sentence should be 10-20 words for clear narration
 - Average speaking rate is approximately 150 words per minute
 - Create image prompts that are detailed and visually descriptive
-- Video prompts should describe camera movement or motion (e.g., "slow zoom in", "pan right")
+- Video prompts should follow Wan 2.2 format (30-80 words): Subject Action + Environmental Effects + Camera Movement
+  - Subject Action: What the main subject does with physical details (gestures, expressions, movement)
+  - Environmental Effects: Atmospheric elements (wind, light, particles, reflections)
+  - Camera Movement: Cinematic camera motion (dolly, pan, zoom, track, orbit) with what it captures
+  - Example: "The scientist leans forward, eyes widening with discovery. Dust motes drift through lamplight. Camera slowly dollies in, capturing the revelation in her expression."
 - Group related sentences into logical sections with clear titles
 - Ensure smooth transitions between sections`;
 
@@ -865,6 +901,7 @@ IMPORTANT RULES:
 3. Maintain the same tone and style as existing sentences
 4. Create smooth transitions with surrounding content
 5. For each sentence, also create image and video prompts for ${visualStyle} visual style
+6. Video prompts use Wan 2.2 format (30-80 words): Subject Action + Environmental Effects + Camera Movement
 
 You MUST respond with valid JSON in this exact format:
 {
@@ -872,7 +909,7 @@ You MUST respond with valid JSON in this exact format:
     {
       "text": "The narration sentence...",
       "imagePrompt": "A ${visualStyle} shot of...",
-      "videoPrompt": "Camera slowly..."
+      "videoPrompt": "Subject performs action with physical detail, environmental atmosphere present. Camera movement type capturing focal element."
     }
   ]
 }`;
@@ -1083,6 +1120,189 @@ Generate a detailed image prompt for each sentence above. Return JSON with the "
 
       throw new DeepseekError(
         `Failed to parse image prompt response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'PARSE_ERROR',
+        { content: content.substring(0, 500) }
+      );
+    }
+  }
+
+  /**
+   * Generate video prompts for a batch of sentences using LLM.
+   * Prompts follow Wan 2.2 format: Subject Action + Environmental Effects + Camera Movement
+   * Uses the imagePrompt for visual continuity when available.
+   */
+  async generateVideoPrompts(options: VideoPromptGenerationOptions): Promise<GeneratedVideoPromptResult> {
+    const { sentences, styleContext, castCharacters } = options;
+
+    if (sentences.length === 0) {
+      return { prompts: [] };
+    }
+
+    const systemPrompt = this.buildVideoPromptSystemPrompt(styleContext, castCharacters);
+    const userPrompt = this.buildVideoPromptUserPrompt(sentences);
+
+    const response = await this.chat([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ]);
+
+    return this.parseVideoPromptResponse(response, sentences.length);
+  }
+
+  /**
+   * Build system prompt for video prompt generation.
+   */
+  private buildVideoPromptSystemPrompt(
+    styleContext?: { name: string; promptPrefix: string | null },
+    castCharacters?: Array<{ name: string; description: string | null }>
+  ): string {
+    let systemPrompt = `You are a professional video director creating motion prompts for AI video generation (Wan 2.2 model).
+Your task is to generate video prompts that bring still images to life with realistic motion.
+
+OUTPUT FORMAT: Subject Action + Environmental Effects + Camera Movement
+
+STRUCTURE:
+1. SUBJECT ACTION (required): Describe what the main subject does with physical details
+   - Muscle movements, facial expressions, posture changes
+   - Specific actions: raises, turns, reaches, breathes, gestures
+   - Use adverbs for pacing: slowly, gently, suddenly, gradually
+
+2. ENVIRONMENTAL EFFECTS (required): Add atmosphere and ambient motion
+   - Wind effects: hair movement, clothing ripple, particles drifting
+   - Light changes: shadows shifting, reflections, highlights
+   - Background elements: clouds moving, water rippling, leaves rustling
+
+3. CAMERA MOVEMENT (required): Cinematic camera work
+   - Movement types: dolly in/out, pan left/right, tilt up/down, track, orbit, crane
+   - Direction and speed: slowly, gradually, smoothly
+   - Focus target: what the camera is capturing or revealing
+
+EXAMPLE OUTPUT:
+"The scientist leans forward, eyes widening with discovery, fingers trembling slightly over the ancient text. Dust motes drift lazily through the warm beam of lamplight, shadows dancing softly on the weathered wall. Camera slowly dollies in, capturing the moment of revelation in her expression."
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+  "prompts": [
+    {
+      "index": 0,
+      "videoPrompt": "Subject action description with physical details..."
+    }
+  ]
+}
+
+IMPORTANT GUIDELINES:
+- Each prompt must be 30-80 words
+- Match the tone of the narration text
+- Reference the image prompt for visual continuity when provided
+- Include subtle, realistic motion (avoid dramatic or unrealistic changes)
+- Prefer reliable camera movements: dolly in, pull back, tracking shot, pan, orbit
+- Avoid: whip pan, crash zoom, rapid movements (model doesn't handle these well)`;
+
+    // Add style context if available
+    if (styleContext?.promptPrefix) {
+      systemPrompt += `
+
+VISUAL STYLE CONTEXT:
+Apply the following visual style: ${styleContext.promptPrefix}
+Style name: ${styleContext.name}
+Ensure motion descriptions complement this aesthetic.`;
+    }
+
+    // Add character descriptions if cast exists
+    if (castCharacters && castCharacters.length > 0) {
+      systemPrompt += `
+
+CHARACTER REFERENCE GUIDE:
+When any of these characters appear, include appropriate motion for their physical characteristics:`;
+
+      for (const char of castCharacters) {
+        systemPrompt += `
+- ${char.name}: ${char.description || 'No detailed description provided'}`;
+      }
+    }
+
+    systemPrompt += `
+
+Output ONLY valid JSON. No markdown code blocks, no explanation.`;
+
+    return systemPrompt;
+  }
+
+  /**
+   * Build user prompt for video prompt generation batch.
+   */
+  private buildVideoPromptUserPrompt(sentences: VideoPromptSentence[]): string {
+    let userPrompt = `Generate video prompts for the following ${sentences.length} sentences.
+Each prompt should describe motion that brings the still image to life.
+
+SENTENCES TO PROCESS:`;
+
+    for (const sentence of sentences) {
+      userPrompt += `
+
+[${sentence.index}] Section: "${sentence.sectionTitle}"
+Narration: "${sentence.text}"`;
+      if (sentence.imagePrompt) {
+        userPrompt += `
+Image visual: "${sentence.imagePrompt}"`;
+      }
+    }
+
+    userPrompt += `
+
+Generate a Wan 2.2 format video prompt for each sentence. Return JSON with the "prompts" array containing objects with "index" (matching the number in brackets) and "videoPrompt" fields.`;
+
+    return userPrompt;
+  }
+
+  /**
+   * Parse video prompt generation response.
+   */
+  private parseVideoPromptResponse(content: string, expectedCount: number): GeneratedVideoPromptResult {
+    let jsonContent = content.trim();
+
+    // Handle markdown code blocks
+    const jsonMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+
+    // Try to find JSON object in the content
+    const objectMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      jsonContent = objectMatch[0];
+    }
+
+    try {
+      const parsed = JSON.parse(jsonContent);
+
+      if (!parsed.prompts || !Array.isArray(parsed.prompts)) {
+        throw new DeepseekError(
+          'Invalid response structure: missing prompts array',
+          'PARSE_ERROR',
+          { parsed }
+        );
+      }
+
+      // Validate and normalize prompts
+      const prompts = parsed.prompts.map((p: Record<string, unknown>) => ({
+        index: Number(p.index),
+        videoPrompt: String(p.videoPrompt || ''),
+      }));
+
+      // Log warning if we got fewer prompts than expected
+      if (prompts.length < expectedCount) {
+        console.warn(`Video prompt generation: expected ${expectedCount} prompts, got ${prompts.length}`);
+      }
+
+      return { prompts };
+    } catch (error) {
+      if (error instanceof DeepseekError) {
+        throw error;
+      }
+
+      throw new DeepseekError(
+        `Failed to parse video prompt response: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'PARSE_ERROR',
         { content: content.substring(0, 500) }
       );

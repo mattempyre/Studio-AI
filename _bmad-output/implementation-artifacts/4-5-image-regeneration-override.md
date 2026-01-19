@@ -73,8 +73,18 @@ so that **I have creative control over specific visuals**.
 - `components/Storyboard/SceneInspector.tsx` - Add prompt editor
 
 ### References
+- [Source: docs/architecture-videogen-ai-studio-2026-01-17.md] - Architecture v1.1 (2026-01-19)
 - [Source: docs/stories/STORY-019-image-regeneration-override.md]
 - [Source: src/backend/api/sentences.ts] - Existing sentences API
+- [Source: src/backend/inngest/client.ts] - Event type definitions (image/generate)
+- [Source: STORY-038 Style Builder UI] - Model/Style configuration used in generation
+
+### Model/Style System Integration (Architecture v1.1)
+
+The `image/generate` event now supports:
+- `modelId`: Optional generation model ID from `generationModels` table
+- `styleId`: Optional visual style ID from `visualStyles` table
+- These override the project-level defaults when specified
 
 ## UX/UI Considerations
 

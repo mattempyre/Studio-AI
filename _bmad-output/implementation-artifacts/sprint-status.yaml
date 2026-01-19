@@ -1,4 +1,4 @@
-# generated: 2026-01-18
+# generated: 2026-01-19
 # project: Studio-AI
 # project_key: videogen-ai-studio
 # tracking_system: file-system
@@ -33,7 +33,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-01-18
+generated: 2026-01-19
 project: Studio-AI
 project_key: videogen-ai-studio
 tracking_system: file-system
@@ -79,6 +79,7 @@ development_status:
   4-3-prompt-display-storyboard: done
   4-4-bulk-scene-generation: ready-for-dev
   4-5-image-regeneration-override: ready-for-dev
+  4-6-style-builder-ui: done  # STORY-038 - Model/Style configuration UI
   epic-4-retrospective: optional
 
   # EPIC-05: Video Generation
@@ -88,12 +89,12 @@ development_status:
   5-3-video-regeneration-override: ready-for-dev
   epic-5-retrospective: optional
 
-  # EPIC-06: Storyboard UI
-  epic-6: backlog
-  6-1-storyboard-table-view: ready-for-dev
-  6-2-storyboard-grid-view: ready-for-dev
-  6-3-scene-inspector-panel: ready-for-dev
-  6-4-section-navigation-sidebar: ready-for-dev
+  # EPIC-06: Storyboard UI (Implemented during earlier development)
+  epic-6: done
+  6-1-storyboard-table-view: done
+  6-2-storyboard-grid-view: done
+  6-3-scene-inspector-panel: done
+  6-4-section-navigation-sidebar: done
   epic-6-retrospective: optional
 
   # EPIC-07: Export System

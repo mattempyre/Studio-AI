@@ -132,18 +132,36 @@ interface VideoGenerationParams {
 
 ### Event Data for `video/generate`
 
+Per architecture v1.1 (2026-01-19), the event schema is:
+
 ```typescript
-{
-  sentenceId: string;
-  projectId: string;
-  imageFile: string;           // Required: source image path
-  prompt: string;              // Motion/scene description
-  modelId?: string;            // Video model ID
-  cameraMovement?: string;     // Camera movement type
-  motionStrength?: number;     // Movement intensity
-  targetDuration?: number;     // Target duration in seconds
-  seed?: number;
-}
+// From src/backend/inngest/client.ts
+'video/generate': {
+  data: {
+    sentenceId: string;
+    projectId: string;
+    imageFile: string;       // Required: source image path
+    prompt: string;          // Motion/scene description (from videoPrompt field or videoPromptService)
+    cameraMovement: string;  // Camera movement type (required)
+    motionStrength: number;  // Movement intensity 0.0-1.0 (required)
+  };
+};
+```
+
+**Note:** Additional parameters like `modelId`, `targetDuration`, and `seed` can be added in a future enhancement. The current architecture keeps the event schema simple.
+
+### Video Prompt Service Integration
+
+Before generating video, ensure video prompts are generated using `videoPromptService`:
+
+```typescript
+// The videoPromptService (src/backend/services/videoPromptService.ts) handles:
+// 1. Getting project context (style, characters)
+// 2. Batch LLM calls to generate video prompts
+// 3. Storing prompts in sentence.videoPrompt field
+
+// Video prompts follow Wan 2.2 format:
+// Subject Action + Environmental Effects + Camera Movement
 ```
 
 ### Source Tree Components

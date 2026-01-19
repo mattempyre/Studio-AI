@@ -51,10 +51,28 @@ so that **I can process my entire video efficiently**.
 
 ## Dev Notes
 
-### Architecture Patterns
+### Architecture Patterns (Updated per Architecture v1.1)
 - Similar to bulk audio generation (STORY-016)
 - Sequential: images first, then videos
 - WebSocket events drive all updates
+- **Audio pre-requisite**: Audio should be generated first (section-level batch is available via `audio/generate-section` event)
+
+### Audio Generation Options (per Architecture v1.1)
+
+The architecture provides two audio generation modes:
+
+1. **Per-sentence audio** (`audio/generate`): Individual TTS for each sentence
+2. **Section-level batch** (`audio/generate-section`): Generate audio for entire section at once, with Whisper-based sentence alignment
+
+For bulk scene generation, consider:
+- If audio is missing, recommend generating section audio first for better flow
+- Section-level audio provides word-level timing for karaoke highlighting
+
+### Video Prompt Dependency
+
+Before video generation, ensure `videoPrompt` fields are populated:
+- Use `prompts/generate-video` event or `videoPromptService` to generate video prompts
+- Video prompts describe motion/action for Wan 2.2 image-to-video workflows
 
 ### Source Tree Components
 
@@ -68,9 +86,12 @@ so that **I can process my entire video efficiently**.
 - `pages/Storyboard.tsx` - Add toolbar
 
 ### References
+- [Source: docs/architecture-videogen-ai-studio-2026-01-17.md] - Architecture v1.1 (2026-01-19)
 - [Source: docs/stories/STORY-027-bulk-scene-generation.md]
 - [Source: docs/stories/STORY-016-bulk-audio-generation.md] - Similar pattern
 - [Source: docs/prd-videogen-ai-studio-2026-01-16.md#FR-606]
+- [Source: src/backend/inngest/client.ts] - Event type definitions
+- [Source: src/backend/services/videoPromptService.ts] - Video prompt generation service
 
 ## Dev Agent Record
 

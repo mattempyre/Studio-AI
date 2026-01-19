@@ -87,8 +87,26 @@ export_{projectId}_{timestamp}/
 - `src/backend/inngest/client.ts` - Add export event types
 
 ### References
+- [Source: docs/architecture-videogen-ai-studio-2026-01-17.md] - Architecture v1.1 (2026-01-19)
 - [Source: docs/stories/STORY-028-export-service.md]
 - [Source: docs/prd-videogen-ai-studio-2026-01-16.md#FR-701 to FR-705]
+- [Source: src/backend/services/fileStorage.ts] - Existing file storage utilities
+- [Source: src/backend/services/outputPaths.ts] - Path generation utilities
+- [Source: src/backend/inngest/client.ts] - Event types (export/start, export/completed)
+
+### Architecture v1.1 Integration Notes
+
+The architecture includes these relevant components:
+- **fileStorage.ts**: Utility service for file operations - can be leveraged for copy operations
+- **outputPaths.ts**: Generates consistent paths for project assets
+- **export/start event**: Already defined in Inngest client schema
+- **export/completed event**: Already defined for job completion notification
+
+Consider using existing services:
+```typescript
+import { outputPaths } from '../services/outputPaths';
+import { fileStorage } from '../services/fileStorage';
+```
 
 ## Dev Agent Record
 

@@ -145,6 +145,22 @@ export type StudioEvents = {
     };
   };
 
+  // Video prompt generation events
+  'prompts/generate-video': {
+    data: {
+      projectId: string;
+      sentenceIds?: string[];  // Optional: specific sentences to generate prompts for
+      force?: boolean;         // If true, regenerate even if prompt exists
+    };
+  };
+  'prompts/generate-video-completed': {
+    data: {
+      projectId: string;
+      total: number;
+      generated: number;
+    };
+  };
+
   // Image generation events
   'image/generate': {
     data: {

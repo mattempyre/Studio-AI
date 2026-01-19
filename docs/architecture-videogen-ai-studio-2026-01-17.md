@@ -1,9 +1,18 @@
 # System Architecture: VideoGen AI Studio
 
-**Date:** 2026-01-17
+**Date:** 2026-01-19 (Updated)
 **Architect:** System Architect (BMAD)
-**Version:** 1.0
+**Version:** 1.1
 **Status:** Approved
+
+> **Changelog v1.1 (2026-01-19):**
+> - Added new database tables: `generationModels`, `visualStyles`
+> - Added WhisperClient for audio transcription/alignment
+> - Added new services: audioAlignment, fileStorage, videoPromptService
+> - Added new Inngest functions for prompt generation and batch audio
+> - Added new API routes: sections, sentences, models, styles, prompts
+> - Updated frontend component inventory with StyleBuilder, karaoke features
+> - Added new event types for batch audio and prompt generation
 
 ---
 
@@ -72,9 +81,9 @@ These NFRs most significantly influence architectural decisions:
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              BROWSER CLIENT                                  │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
-│  │  Dashboard  │ │ScriptEditor │ │ Storyboard  │ │VideoPreview │           │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘           │
+│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐    │
+│  │ Dashboard │ │ScriptEdit │ │Storyboard │ │StyleBuild │ │VoiceOver  │    │
+│  └───────────┘ └───────────┘ └───────────┘ └───────────┘ └───────────┘    │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │ HTTP/WebSocket
                                  ▼
@@ -82,15 +91,16 @@ These NFRs most significantly influence architectural decisions:
 │                           EXPRESS SERVER (:3001)                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                         API LAYER                                    │   │
-│  │  /api/v1/projects  /api/v1/characters  /api/v1/inngest  /health     │   │
+│  │  /projects /characters /sections /sentences /models /styles /prompts│   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                      SERVICE LAYER                                   │   │
-│  │  JobService  ProjectService  ScriptService  ExportService           │   │
+│  │  JobService  PromptService  AudioAlignment  VideoPromptService      │   │
+│  │  OutputPaths  FileStorage                                           │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                      CLIENT LAYER                                    │   │
-│  │  DeepseekClient  ComfyUIClient  ChatterboxClient                    │   │
+│  │  DeepseekClient  ComfyUIClient  ChatterboxClient  WhisperClient     │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                       DATA LAYER                                     │   │
@@ -105,30 +115,41 @@ These NFRs most significantly influence architectural decisions:
 │    Job Orchestration     │                     │     data/studio.db       │
 │  ┌────────────────────┐  │                     │  ┌────────────────────┐  │
 │  │ script/generate    │  │                     │  │ projects           │  │
-│  │ audio/generate     │  │                     │  │ sections           │  │
-│  │ image/generate     │  │                     │  │ sentences          │  │
-│  │ video/generate     │  │                     │  │ characters         │  │
-│  │ export/start       │  │                     │  │ generation_jobs    │  │
-│  └────────────────────┘  │                     │  │ script_outlines    │  │
-└──────────────────────────┘                     │  └────────────────────┘  │
-              │                                  └──────────────────────────┘
+│  │ script/generate-   │  │                     │  │ sections           │  │
+│  │   long             │  │                     │  │ sentences          │  │
+│  │ audio/generate     │  │                     │  │ characters         │  │
+│  │ audio/generate-    │  │                     │  │ generation_jobs    │  │
+│  │   section          │  │                     │  │ script_outlines    │  │
+│  │ prompts/generate-  │  │                     │  │ generation_models  │  │
+│  │   image            │  │                     │  │ visual_styles      │  │
+│  │ prompts/generate-  │  │                     │  │ project_cast       │  │
+│  │   video            │  │                     │  └────────────────────┘  │
+│  │ image/generate     │  │                     └──────────────────────────┘
+│  │ video/generate     │  │
+│  │ export/start       │  │
+│  └────────────────────┘  │
+└──────────────────────────┘
               │
               ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        EXTERNAL SERVICES (LOCAL)                             │
 │                                                                              │
-│  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐ │
-│  │   COMFYUI (:8188)   │  │ CHATTERBOX (:8004)  │  │  DEEPSEEK (Cloud)   │ │
-│  │                     │  │                     │  │                     │ │
-│  │ • Image Generation  │  │ • Text-to-Speech   │  │ • Script Generation │ │
-│  │ • Video Generation  │  │ • Voice Selection  │  │ • Outline Creation  │ │
-│  │ • Flux 2, WAN 2.2   │  │ • WAV Output       │  │ • Summarization     │ │
-│  └─────────────────────┘  └─────────────────────┘  └─────────────────────┘ │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐            │
+│  │ COMFYUI (:8188)  │ │CHATTERBOX(:8004) │ │ WHISPER (:8005)  │            │
+│  │ • Image Gen      │ │ • Text-to-Speech │ │ • Transcription  │            │
+│  │ • Video Gen      │ │ • Voice Selection│ │ • Word Timing    │            │
+│  │ • Flux 2, WAN2.2 │ │ • WAV Output     │ │ • Audio Align    │            │
+│  └──────────────────┘ └──────────────────┘ └──────────────────┘            │
 │                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                        FILE STORAGE                                  │   │
-│  │  data/projects/{projectId}/audio/  images/  videos/                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                     DEEPSEEK (Cloud)                                  │  │
+│  │  • Script Generation • Outline Creation • Prompt Generation          │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                        FILE STORAGE                                   │  │
+│  │  data/projects/{projectId}/audio/  images/  videos/                  │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -228,12 +249,15 @@ User Input (Topic/Script)
 
 ### 3.5 External Services
 
-| Service | Technology | Local/Cloud | Purpose |
-|---------|------------|-------------|---------|
-| **Script Gen** | Deepseek API | Cloud | LLM for script/outline generation |
-| **Image Gen** | ComfyUI | Local | Flux 2, image workflows |
-| **Video Gen** | ComfyUI | Local | WAN 2.2, video workflows |
-| **TTS** | Chatterbox | Local | Text-to-speech generation |
+| Service | Technology | Local/Cloud | Port | Purpose |
+|---------|------------|-------------|------|---------|
+| **Script Gen** | Deepseek API | Cloud | - | LLM for script/outline/prompt generation |
+| **Image Gen** | ComfyUI | Local | 8188 | Flux 2, image workflows |
+| **Video Gen** | ComfyUI | Local | 8188 | WAN 2.2, video workflows |
+| **TTS** | Chatterbox | Local | 8004 | Text-to-speech generation |
+| **Transcription** | Whisper | Local | 8005 | Audio transcription with word-level timing |
+
+> **Note:** Whisper is used for batch audio alignment - when generating audio for an entire section at once, Whisper provides word-level timestamps to align sentences with their audio segments, enabling karaoke-style highlighting.
 
 ### 3.6 Infrastructure
 
@@ -253,40 +277,77 @@ User Input (Topic/Script)
 ┌─────────────────────────────────────────────────────────────────┐
 │                      FRONTEND COMPONENTS                         │
 ├─────────────────────────────────────────────────────────────────┤
-│  App.tsx          │ Root, global state, routing                 │
-│  Dashboard.tsx    │ Project list, create new                    │
-│  ScriptEditor.tsx │ Script generation, editing                  │
-│  Storyboard.tsx   │ Visual scene management                     │
-│  VideoPreview.tsx │ Timeline preview (future)                   │
-│  VoiceOver.tsx    │ Audio management                            │
-│  Layout.tsx       │ Navigation, header                          │
+│  App.tsx              │ Root, global state, routing             │
+│  Dashboard.tsx        │ Project list, create new                │
+│  ScriptEditorV2/      │ Script generation, editing, audio       │
+│   ├─ Header.tsx       │  Header with project controls           │
+│   ├─ Sidebar.tsx      │  Section navigation                     │
+│   ├─ SectionCard.tsx  │  Section display and edit               │
+│   ├─ SentenceRow.tsx  │  Sentence editing                       │
+│   ├─ AudioPlayer.tsx  │  Audio playback controls                │
+│   ├─ AudioToolbar.tsx │  Audio generation controls              │
+│   ├─ KaraokeText.tsx  │  Word-level highlighting                │
+│   └─ PromptsPanel.tsx │  Image/video prompt editing             │
+│  Storyboard.tsx       │ Visual scene management                 │
+│  VideoPreview.tsx     │ Timeline preview (future)               │
+│  VoiceOver.tsx        │ Audio management                        │
+│  StyleBuilder/        │ Model and style management              │
+│   ├─ ModelGallery.tsx │  Available models grid                  │
+│   ├─ ModelCard.tsx    │  Model display                          │
+│   ├─ ModelForm.tsx    │  Model editing form                     │
+│   ├─ StyleGallery.tsx │  Available styles grid                  │
+│   ├─ StyleCard.tsx    │  Style display                          │
+│   └─ StyleForm.tsx    │  Style editing form                     │
+│  CharacterLibrary/    │ Character management                    │
+│   ├─ CharacterGrid.tsx│  Character list                         │
+│   ├─ CharacterCard.tsx│  Character display                      │
+│   └─ CharacterModal   │  Character create/edit                  │
+│  Layout.tsx           │ Navigation, header                      │
 └─────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
 │                      BACKEND COMPONENTS                          │
 ├─────────────────────────────────────────────────────────────────┤
-│  API Layer        │                                             │
-│  ├─ projects.ts   │ Project CRUD, script generation             │
-│  ├─ characters.ts │ Character library management                │
-│  ├─ health.ts     │ Health checks                               │
-│  └─ inngest.ts    │ Inngest webhook handler                     │
+│  API Layer            │                                         │
+│  ├─ projects.ts       │ Project CRUD, cast management           │
+│  ├─ characters.ts     │ Character library management            │
+│  ├─ sections.ts       │ Section CRUD                            │
+│  ├─ sentences.ts      │ Sentence CRUD                           │
+│  ├─ scripts.ts        │ Script/outline generation triggers      │
+│  ├─ images.ts         │ Image generation triggers               │
+│  ├─ prompts.ts        │ Prompt generation triggers              │
+│  ├─ models.ts         │ Generation models CRUD                  │
+│  ├─ styles.ts         │ Visual styles CRUD                      │
+│  ├─ health.ts         │ Health checks                           │
+│  └─ inngest.ts        │ Inngest webhook handler                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  Service Layer    │                                             │
-│  ├─ jobService.ts │ Job status tracking                         │
-│  └─ outputPaths.ts│ File path generation                        │
+│  Service Layer        │                                         │
+│  ├─ jobService.ts     │ Job status tracking                     │
+│  ├─ outputPaths.ts    │ File path generation                    │
+│  ├─ promptService.ts  │ Image prompt generation logic           │
+│  ├─ videoPromptSvc.ts │ Video prompt generation logic           │
+│  ├─ audioAlignment.ts │ Whisper-based sentence alignment        │
+│  └─ fileStorage.ts    │ File storage utilities                  │
 ├─────────────────────────────────────────────────────────────────┤
-│  Client Layer     │                                             │
-│  ├─ deepseek.ts   │ Script/outline generation                   │
-│  ├─ comfyui.ts    │ Image/video generation                      │
-│  └─ chatterbox.ts │ TTS generation                              │
+│  Client Layer         │                                         │
+│  ├─ deepseek.ts       │ Script/outline/prompt generation        │
+│  ├─ comfyui.ts        │ Image/video generation                  │
+│  ├─ chatterbox.ts     │ TTS generation                          │
+│  └─ whisper.ts        │ Audio transcription & alignment         │
 ├─────────────────────────────────────────────────────────────────┤
-│  Data Layer       │                                             │
-│  ├─ schema.ts     │ Drizzle table definitions                   │
-│  └─ index.ts      │ Database connection                         │
+│  Data Layer           │                                         │
+│  ├─ schema.ts         │ Drizzle table definitions               │
+│  ├─ index.ts          │ Database connection                     │
+│  └─ seed.ts           │ Database seeding                        │
 ├─────────────────────────────────────────────────────────────────┤
-│  Inngest Layer    │                                             │
-│  ├─ client.ts     │ Inngest client, event types                 │
-│  └─ functions/    │ Job handlers                                │
+│  Inngest Layer        │                                         │
+│  ├─ client.ts         │ Inngest client, event types             │
+│  └─ functions/        │ Job handlers (see 4.2.6)                │
+├─────────────────────────────────────────────────────────────────┤
+│  WebSocket Layer      │                                         │
+│  ├─ server.ts         │ WebSocket server setup                  │
+│  ├─ broadcast.ts      │ Event broadcasting utilities            │
+│  └─ types.ts          │ Message type definitions                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -364,7 +425,39 @@ class ChatterboxClient {
 
 ---
 
-#### 4.2.4 ComfyUIClient
+#### 4.2.4 WhisperClient (NEW)
+
+**Purpose:** Audio transcription with word-level timing
+
+**Responsibilities:**
+- Transcribe audio files to text
+- Provide word-level timestamps
+- Support sentence alignment for batch audio
+
+**Interfaces:**
+```typescript
+class WhisperClient {
+  transcribe(audioPath: string, language?: string): Promise<TranscriptionResult>
+  healthCheck(): Promise<boolean>
+  getInfo(): Promise<{ model: string; device: string; computeType: string }>
+}
+
+interface TranscriptionResult {
+  text: string;
+  language: string;
+  duration: number;
+  segments: SegmentTiming[];
+  words: WordTiming[];  // For sentence alignment
+}
+```
+
+**Dependencies:** Whisper Docker container (local, port 8005)
+
+**FRs Addressed:** FR-302 (enhanced audio alignment), karaoke highlighting
+
+---
+
+#### 4.2.5 ComfyUIClient
 
 **Purpose:** Image and video generation via ComfyUI workflows
 
@@ -415,18 +508,30 @@ class JobService {
 
 ---
 
-#### 4.2.6 Inngest Functions
+#### 4.2.7 Inngest Functions
 
 **Purpose:** Durable background job execution
 
-**Functions:**
+**Implemented Functions:**
 
 | Function | Trigger Event | Purpose | Concurrency |
 |----------|---------------|---------|-------------|
-| `generateLongScript` | `script/generate-long` | Long-form script generation | 1 |
-| `generateAudio` | `audio/generate` | TTS for single sentence | 4 |
-| `generateImage` | `image/generate` | Image for single sentence | 1 |
-| `generateVideo` | `video/generate` | Video for single sentence | 1 |
+| `helloFunction` | `test/hello` | Test Inngest connectivity | 1 |
+| `generateScriptFunction` | `script/generate` | Short-form script (<10 min) | 1 |
+| `generateLongScriptFunction` | `script/generate-long` | Long-form script (up to 3 hr) | 1 |
+| `generateOutlineOnlyFunction` | `script/generate-long` (mode: outline) | Generate outline without full script | 1 |
+| `generateAudioFunction` | `audio/generate` | TTS for single sentence | 4 |
+| `generateSectionAudioFunction` | `audio/generate-section` | Batch TTS for entire section | 2 |
+| `retroactiveAudioAlignmentFunction` | `audio/retroactive-align` | Align existing audio with Whisper | 2 |
+| `generateImagePromptsFunction` | `prompts/generate-image` | LLM-generated image prompts | 1 |
+| `generateVideoPromptsFunction` | `prompts/generate-video` | LLM-generated video prompts | 1 |
+| `generateImageFunction` | `image/generate` | Image for single sentence | 1 |
+
+**Planned Functions (TODO):**
+
+| Function | Trigger Event | Purpose | Concurrency |
+|----------|---------------|---------|-------------|
+| `generateVideo` | `video/generate` | Video from image | 1 |
 | `exportProject` | `export/start` | Bundle all assets | 1 |
 
 **FRs Addressed:** NFR-003, NFR-005, FR-302, FR-401, FR-501, FR-702
@@ -438,26 +543,43 @@ class JobService {
 ### 5.1 Entity Relationship Diagram
 
 ```
-┌─────────────────┐       ┌─────────────────┐
-│    projects     │       │   characters    │
-├─────────────────┤       ├─────────────────┤
-│ id (PK)         │       │ id (PK)         │
-│ name            │       │ name            │
-│ topic           │       │ description     │
-│ targetDuration  │       │ referenceImages │
-│ visualStyle     │       │ styleLora       │
-│ voiceId         │       │ createdAt       │
-│ status          │       └────────┬────────┘
-│ createdAt       │                │
-│ updatedAt       │                │
-└────────┬────────┘                │
-         │                         │
-         │    ┌────────────────────┴────────────────────┐
-         │    │              project_cast               │
-         │    ├─────────────────────────────────────────┤
-         │    │ projectId (FK) ─────────────────────────┤
-         │    │ characterId (FK) ───────────────────────┘
-         │    └─────────────────────────────────────────┘
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│    projects     │       │   characters    │       │generation_models│
+├─────────────────┤       ├─────────────────┤       ├─────────────────┤
+│ id (PK)         │       │ id (PK)         │       │ id (PK)         │
+│ name            │       │ name            │       │ name            │
+│ topic           │       │ description     │       │ description     │
+│ targetDuration  │       │ referenceImages │       │ workflowFile    │
+│ modelId (FK)    │───────│ styleLora       │       │ workflowCategory│
+│ styleId (FK)    │─┐     │ createdAt       │       │ workflowType    │
+│ visualStyle*    │ │     └────────┬────────┘       │ defaultSteps    │
+│ voiceId         │ │              │                │ defaultCfg      │
+│ status          │ │              │                │ defaultFrames   │
+│ createdAt       │ │              │                │ defaultFps      │
+│ updatedAt       │ │              │                │ isActive        │
+└────────┬────────┘ │              │                └─────────────────┘
+         │          │              │
+         │          │  ┌───────────┴────────────────┐
+         │          │  │       project_cast         │
+         │          │  ├────────────────────────────┤
+         │          │  │ projectId (FK)             │
+         │          │  │ characterId (FK)           │
+         │          │  └────────────────────────────┘
+         │          │
+         │          │  ┌─────────────────┐
+         │          └─▶│  visual_styles  │
+         │             ├─────────────────┤
+         │             │ id (PK)         │
+         │             │ name            │
+         │             │ description     │
+         │             │ styleType       │
+         │             │ promptPrefix    │
+         │             │ loraFile        │
+         │             │ loraStrength    │
+         │             │ compatibleModels│
+         │             │ requiresCharRef │
+         │             │ isActive        │
+         │             └─────────────────┘
          │
          │    ┌─────────────────┐
          │    │ script_outlines │
@@ -465,33 +587,40 @@ class JobService {
          ├───▶│ id (PK)         │
          │    │ projectId (FK)  │
          │    │ title           │
+         │    │ topic           │
          │    │ totalTargetMins │
+         │    │ visualStyle     │
          │    │ sections (JSON) │
          │    │ runningSummary  │
          │    │ coveredTopics   │
+         │    │ currentSectionIdx│
          │    │ status          │
          │    └─────────────────┘
          │
-         │    ┌─────────────────┐       ┌─────────────────┐
-         │    │    sections     │       │   sentences     │
-         │    ├─────────────────┤       ├─────────────────┤
-         └───▶│ id (PK)         │──────▶│ id (PK)         │
-              │ projectId (FK)  │       │ sectionId (FK)  │
-              │ title           │       │ text            │
-              │ order           │       │ order           │
-              │ createdAt       │       │ imagePrompt     │
-              └─────────────────┘       │ videoPrompt     │
-                                        │ cameraMovement  │
-                                        │ motionStrength  │
-                                        │ audioFile       │
-                                        │ audioDuration   │
-                                        │ imageFile       │
-                                        │ videoFile       │
-                                        │ isAudioDirty    │
-                                        │ isImageDirty    │
-                                        │ isVideoDirty    │
-                                        │ status          │
-                                        └─────────────────┘
+         │    ┌─────────────────┐       ┌─────────────────────┐
+         │    │    sections     │       │     sentences       │
+         │    ├─────────────────┤       ├─────────────────────┤
+         └───▶│ id (PK)         │──────▶│ id (PK)             │
+              │ projectId (FK)  │       │ sectionId (FK)      │
+              │ title           │       │ text                │
+              │ order           │       │ order               │
+              │ createdAt       │       │ imagePrompt         │
+              └─────────────────┘       │ videoPrompt         │
+                                        │ cameraMovement      │
+                                        │ motionStrength      │
+                                        │ audioFile           │
+                                        │ audioDuration       │
+                                        │ audioStartMs (NEW)  │
+                                        │ audioEndMs (NEW)    │
+                                        │ sectionAudioFile(NEW)│
+                                        │ wordTimings (NEW)   │
+                                        │ imageFile           │
+                                        │ videoFile           │
+                                        │ isAudioDirty        │
+                                        │ isImageDirty        │
+                                        │ isVideoDirty        │
+                                        │ status              │
+                                        └─────────────────────┘
 
 ┌─────────────────┐
 │ generation_jobs │
@@ -499,6 +628,7 @@ class JobService {
 │ id (PK)         │
 │ sentenceId (FK) │
 │ projectId (FK)  │
+│ outlineId (FK)  │
 │ jobType         │
 │ status          │
 │ progress        │
@@ -512,6 +642,8 @@ class JobService {
 │ completedAt     │
 │ createdAt       │
 └─────────────────┘
+
+* visualStyle is legacy field, kept for backwards compatibility
 ```
 
 ### 5.2 Table Definitions
@@ -612,6 +744,37 @@ export const projectCast = sqliteTable('project_cast', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.projectId, table.characterId] }),
 }));
+
+// NEW: generation_models - ComfyUI workflow configurations
+export const generationModels = sqliteTable('generation_models', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  workflowFile: text('workflow_file'), // Path to ComfyUI workflow JSON
+  workflowCategory: text('workflow_category').notNull().default('image'), // 'image' | 'video'
+  workflowType: text('workflow_type').notNull().default('text-to-image'), // 'text-to-image' | 'image-to-image' | 'image-to-video'
+  defaultSteps: integer('default_steps').default(4),
+  defaultCfg: real('default_cfg').default(1.0),
+  defaultFrames: integer('default_frames'), // For video models
+  defaultFps: integer('default_fps'), // For video models
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }),
+});
+
+// NEW: visual_styles - Prompt prefixes and LoRA configurations
+export const visualStyles = sqliteTable('visual_styles', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  styleType: text('style_type').notNull().default('prompt'), // 'prompt' | 'lora'
+  promptPrefix: text('prompt_prefix'), // For prompt-based styles
+  loraFile: text('lora_file'), // For LoRA-based styles
+  loraStrength: real('lora_strength').default(1.0),
+  compatibleModels: text('compatible_models', { mode: 'json' }).$type<string[]>().default([]),
+  requiresCharacterRef: integer('requires_character_ref', { mode: 'boolean' }).notNull().default(false),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }),
+});
 ```
 
 ### 5.3 File Storage Structure
@@ -692,6 +855,24 @@ data/
 | POST | `/api/v1/projects/:id/generate-videos` | Generate all videos | FR-606 |
 | POST | `/api/v1/sentences/:id/generate-video` | Generate single video | FR-508 |
 
+#### Sections (NEW)
+
+| Method | Endpoint | Description | FRs |
+|--------|----------|-------------|-----|
+| GET | `/api/v1/sections/:id` | Get section with sentences | - |
+| PUT | `/api/v1/sections/:id` | Update section | - |
+| DELETE | `/api/v1/sections/:id` | Delete section | - |
+| POST | `/api/v1/sections/:id/generate-audio` | Generate audio for section | FR-302 |
+
+#### Sentences (NEW)
+
+| Method | Endpoint | Description | FRs |
+|--------|----------|-------------|-----|
+| GET | `/api/v1/sentences/:id` | Get sentence details | - |
+| PUT | `/api/v1/sentences/:id` | Update sentence text/prompts | FR-102, FR-406, FR-505 |
+| DELETE | `/api/v1/sentences/:id` | Delete sentence | - |
+| POST | `/api/v1/sentences/:id/regenerate` | Regenerate specific assets | FR-408, FR-508 |
+
 #### Characters
 
 | Method | Endpoint | Description | FRs |
@@ -703,7 +884,34 @@ data/
 | POST | `/api/v1/projects/:id/cast` | Add character to project | FR-204 |
 | DELETE | `/api/v1/projects/:id/cast/:characterId` | Remove from cast | FR-204 |
 
-#### Export
+#### Generation Models (NEW - Style Builder)
+
+| Method | Endpoint | Description | FRs |
+|--------|----------|-------------|-----|
+| GET | `/api/v1/models` | List all generation models | NFR-008 |
+| POST | `/api/v1/models` | Create generation model | NFR-008 |
+| GET | `/api/v1/models/:id` | Get model details | - |
+| PUT | `/api/v1/models/:id` | Update model | NFR-008 |
+| DELETE | `/api/v1/models/:id` | Delete model | - |
+
+#### Visual Styles (NEW - Style Builder)
+
+| Method | Endpoint | Description | FRs |
+|--------|----------|-------------|-----|
+| GET | `/api/v1/styles` | List all visual styles | FR-107 |
+| POST | `/api/v1/styles` | Create visual style | FR-107 |
+| GET | `/api/v1/styles/:id` | Get style details | - |
+| PUT | `/api/v1/styles/:id` | Update style | FR-107 |
+| DELETE | `/api/v1/styles/:id` | Delete style | - |
+
+#### Prompt Generation (NEW)
+
+| Method | Endpoint | Description | FRs |
+|--------|----------|-------------|-----|
+| POST | `/api/v1/projects/:id/prompts/image` | Generate image prompts for project | FR-403 |
+| POST | `/api/v1/projects/:id/prompts/video` | Generate video prompts for project | FR-403 |
+
+#### Export (Planned)
 
 | Method | Endpoint | Description | FRs |
 |--------|----------|-------------|-----|
@@ -714,7 +922,7 @@ data/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check |
+| GET | `/api/v1/health` | Health check |
 | WS | `/ws` | WebSocket connection for real-time updates |
 
 ### 6.3 WebSocket Events
@@ -726,13 +934,32 @@ interface SubscribeMessage {
   projectId: string;
 }
 
+interface UnsubscribeMessage {
+  type: 'unsubscribe';
+  projectId: string;
+}
+
 // Server → Client
+interface ConnectedMessage {
+  type: 'connected';
+  clientId: string;
+}
+
+interface SubscribedMessage {
+  type: 'subscribed';
+  projectId: string;
+}
+
 interface ProgressEvent {
   type: 'progress';
   jobId: string;
-  jobType: 'script' | 'audio' | 'image' | 'video' | 'export';
+  jobType: 'script' | 'script-long' | 'audio' | 'audio-section' |
+           'image' | 'image-prompts' | 'video' | 'video-prompts' | 'export';
   progress: number;
   message?: string;
+  stepName?: string;      // For multi-step jobs
+  currentStep?: number;
+  totalSteps?: number;
 }
 
 interface JobCompleteEvent {
@@ -740,9 +967,15 @@ interface JobCompleteEvent {
   jobId: string;
   jobType: string;
   sentenceId?: string;
+  sectionId?: string;     // NEW: For section-level audio
   result: {
     file?: string;
     duration?: number;
+    wordTimings?: Array<{  // NEW: For karaoke highlighting
+      word: string;
+      startMs: number;
+      endMs: number;
+    }>;
   };
 }
 
@@ -1393,6 +1626,55 @@ jobs:
 
 ---
 
+## Appendix C: Implementation Status (as of 2026-01-19)
+
+### ✅ Fully Implemented
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Database Schema | ✅ Complete | All 8 tables implemented including new models/styles tables |
+| API Routes | ✅ Complete | 12 route modules (projects, characters, sections, sentences, scripts, images, models, styles, prompts, health, inngest) |
+| External Clients | ✅ Complete | Deepseek, ComfyUI, Chatterbox, Whisper |
+| WebSocket | ✅ Complete | Real-time progress updates with project subscriptions |
+| Script Generation | ✅ Complete | Short-form, long-form with outline support |
+| Audio Generation | ✅ Complete | Per-sentence and per-section batch modes with karaoke support |
+| Image Prompts | ✅ Complete | LLM-generated image prompts |
+| Video Prompts | ✅ Complete | LLM-generated video prompts |
+| Image Generation | ✅ Complete | Via ComfyUI workflows |
+| Style Builder UI | ✅ Complete | Models and styles CRUD |
+| Character Library | ✅ Complete | CRUD with reference images |
+
+### 🚧 Partially Implemented
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| VideoPreview | 🚧 Planned | Timeline editor not yet implemented |
+
+> **Note:** Storyboard UI (EPIC-06) was completed during earlier development:
+> - ✅ Table view, Grid view, Scene inspector panel, Section navigation sidebar - all done
+
+### ❌ Not Yet Implemented
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Video Generation | ❌ TODO | Inngest function exists in events but handler not implemented |
+| Export Service | ❌ TODO | Export to ZIP with NLE-compatible structure |
+| Export UI | ❌ TODO | Download and progress tracking |
+
+### 📝 New Features Not in Original Architecture
+
+| Feature | Description |
+|---------|-------------|
+| Whisper Integration | Audio transcription for sentence alignment and karaoke highlighting |
+| Batch Audio Generation | Generate TTS for entire section at once (more natural flow) |
+| Word-level Timing | Karaoke-style highlighting during audio playback |
+| Generation Models Table | Database-driven ComfyUI workflow configurations |
+| Visual Styles Table | Database-driven prompt prefixes and LoRA configurations |
+| Style Builder | Admin UI for managing models and styles |
+| Retroactive Audio Alignment | Align existing audio with sentences using Whisper |
+
+---
+
 *Created by BMAD Method v6 - System Architect*
-*Architecture Version: 1.0*
-*Last Updated: 2026-01-17*
+*Architecture Version: 1.1*
+*Last Updated: 2026-01-19*
