@@ -4,6 +4,7 @@ import * as Icons from './Icons';
 import { Project, Scene } from '../types';
 import { generateImage, generateVideo } from '../services/geminiService';
 import { Button } from './ui/button';
+import { BulkGenerationToolbar } from './Storyboard/BulkGenerationToolbar';
 
 interface StoryboardProps {
   project: Project;
@@ -195,13 +196,13 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
             <div className="flex items-center gap-4">
             <h3 className="text-lg font-bold">Storyboard Flow</h3>
             <div className="flex items-center bg-[#1e1933] rounded-lg p-1 border border-white/5">
-                <button 
+                <button
                   onClick={() => setViewMode('table')}
                   className={`px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${viewMode === 'table' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-text-muted hover:bg-white/5 hover:text-white'}`}
                 >
                   <Icons.List size={12}/> TABLE
                 </button>
-                <button 
+                <button
                   onClick={() => setViewMode('grid')}
                   className={`px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${viewMode === 'grid' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-text-muted hover:bg-white/5 hover:text-white'}`}
                 >
@@ -209,6 +210,15 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                 </button>
             </div>
             </div>
+
+            {/* Bulk Scene Generation Toolbar - STORY-4-4 */}
+            <BulkGenerationToolbar
+              projectId={project.id}
+              onGenerationComplete={() => {
+                // Trigger project refresh when generation completes
+                // The onUpdateProject will be called by parent when data changes
+              }}
+            />
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 custom-scrollbar">

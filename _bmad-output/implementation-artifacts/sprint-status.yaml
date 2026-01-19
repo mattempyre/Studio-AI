@@ -77,7 +77,7 @@ development_status:
   4-1-image-prompt-generation: dev-complete
   4-2-image-generation-job: dev-complete
   4-3-prompt-display-storyboard: done
-  4-4-bulk-scene-generation: ready-for-dev
+  4-4-bulk-scene-generation: review
   4-5-image-regeneration-override: ready-for-dev
   4-6-style-builder-ui: done  # STORY-038 - Model/Style configuration UI
   epic-4-retrospective: optional
