@@ -108,6 +108,11 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
   const [currentAudioLabel, setCurrentAudioLabel] = useState<string | undefined>(undefined);
 
+  // Karaoke sync state for word highlighting during playback
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [audioCurrentTimeMs, setAudioCurrentTimeMs] = useState(0);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+
   // Character management with useCharacters hook
   const {
     characters: backendCharacters,
@@ -139,9 +144,12 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     completedCount: audioCompletedCount,
     failedCount: audioFailedCount,
     overallProgress: audioOverallProgress,
+    mode: audioMode,
     generateAll: generateAllAudio,
     cancelAll: cancelAllAudio,
+    setMode: setAudioMode,
     getSentenceStatus: getAudioSentenceStatus,
+    forceRegenerate: forceRegenerateAudio,
     error: audioError,
   } = useAudioGeneration(projectId, {
     onSentenceComplete: useCallback((sentenceId: string, audioFile: string, duration?: number) => {
@@ -178,7 +186,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   // Audio file paths from DB are like "./data/projects/{projectId}/audio/{sentenceId}.wav"
   // or on Windows: "data\projects\{projectId}\audio\{sentenceId}.wav"
   // We need to convert to URL: "{API_BASE}/media/projects/{projectId}/audio/{sentenceId}.wav"
-  const handlePlayAudio = useCallback((audioFilePath: string, label?: string) => {
+  const handlePlayAudio = useCallback((audioFilePath: string, label?: string, sectionId?: string) => {
     // Normalize path separators (Windows backslashes to forward slashes)
     const normalizedPath = audioFilePath.replace(/\\/g, '/');
 
@@ -196,15 +204,21 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
       audioUrl = `${API_BASE}${normalizedPath}`;
     }
 
-    console.log('[Audio] Playing:', audioUrl);
+    console.log('[Audio] Playing:', audioUrl, sectionId ? `(section: ${sectionId})` : '');
     setCurrentAudioUrl(audioUrl);
     setCurrentAudioLabel(label);
+    // Track which section is playing for karaoke sync
+    setActiveSectionId(sectionId || null);
   }, []);
 
   // Close audio player
   const handleCloseAudioPlayer = useCallback(() => {
     setCurrentAudioUrl(null);
     setCurrentAudioLabel(undefined);
+    // Reset karaoke sync state
+    setActiveSectionId(null);
+    setAudioCurrentTimeMs(0);
+    setIsAudioPlaying(false);
   }, []);
 
   // Model/Style selection state
@@ -1124,8 +1138,11 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
                   completedCount={audioCompletedCount}
                   failedCount={audioFailedCount}
                   overallProgress={audioOverallProgress}
+                  mode={audioMode}
+                  onModeChange={setAudioMode}
                   onGenerateAll={generateAllAudio}
                   onCancelAll={cancelAllAudio}
+                  onForceRegenerate={forceRegenerateAudio}
                   error={audioError}
                 />
               )}
@@ -1163,6 +1180,10 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
                       onAIExpand={(afterSentenceId) => handleOpenAIExpand(section, afterSentenceId)}
                       getSentenceAudioState={getAudioSentenceStatus}
                       onPlayAudio={handlePlayAudio}
+                      // Karaoke sync props
+                      currentAudioTimeMs={audioCurrentTimeMs}
+                      isAudioPlaying={isAudioPlaying}
+                      activeSectionId={activeSectionId}
                     />
                   ))}
 
@@ -1269,6 +1290,9 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
           audioUrl={currentAudioUrl}
           onClose={handleCloseAudioPlayer}
           trackLabel={currentAudioLabel}
+          sectionId={activeSectionId}
+          onTimeUpdate={setAudioCurrentTimeMs}
+          onPlayStateChange={setIsAudioPlaying}
         />
       </div>
     </ScriptEditorErrorBoundary>

@@ -17,7 +17,11 @@ export const SectionCard: React.FC<{
     onReorderSentences: (sentenceIds: string[]) => void;
     onAIExpand: (afterSentenceId?: string) => void;
     getSentenceAudioState?: (sentenceId: string) => SentenceAudioState | undefined;
-    onPlayAudio?: (audioUrl: string) => void;
+    onPlayAudio?: (audioUrl: string, label?: string, sectionId?: string) => void;
+    // Karaoke sync props
+    currentAudioTimeMs?: number;
+    isAudioPlaying?: boolean;
+    activeSectionId?: string | null;
 }> = ({
     section,
     sectionIndex,
@@ -32,6 +36,10 @@ export const SectionCard: React.FC<{
     onAIExpand,
     getSentenceAudioState,
     onPlayAudio,
+    // Karaoke sync
+    currentAudioTimeMs = 0,
+    isAudioPlaying = false,
+    activeSectionId = null,
 }) => {
         const [isEditingTitle, setIsEditingTitle] = useState(false);
         const [titleInput, setTitleInput] = useState(section.title);
@@ -242,6 +250,10 @@ export const SectionCard: React.FC<{
                                             isDragOver={dragOverIndex === index}
                                             audioState={getSentenceAudioState?.(sentence.id)}
                                             onPlayAudio={onPlayAudio}
+                                            // Karaoke sync
+                                            currentAudioTimeMs={currentAudioTimeMs}
+                                            isAudioPlaying={isAudioPlaying}
+                                            activeSectionId={activeSectionId}
                                         />
                                     </React.Fragment>
                                 ))}

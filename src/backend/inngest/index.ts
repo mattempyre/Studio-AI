@@ -9,6 +9,7 @@ import {
   generateOutlineOnlyFunction,
   generateScriptFunction,
   generateAudioFunction,
+  generateSectionAudioFunction,
   generateImageFunction,
 } from './functions/index.js';
 
@@ -20,6 +21,7 @@ export const functions = [
   generateOutlineOnlyFunction,
   generateScriptFunction,
   generateAudioFunction,
+  generateSectionAudioFunction,
   generateImageFunction,
   // Future functions:
   // generateVideo,

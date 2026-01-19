@@ -1,9 +1,11 @@
 import { inngest } from '../client.js';
 import { createChatterboxClient } from '../../clients/chatterbox.js';
+import { createWhisperClient } from '../../clients/whisper.js';
 import { jobService } from '../../services/jobService.js';
 import { getAudioPath } from '../../services/outputPaths.js';
 import { db, sentences } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
+import type { WordTimingData } from '../../services/audioAlignment.js';
 
 /**
  * Inngest function for generating audio for a single sentence using Chatterbox TTS.
@@ -83,13 +85,48 @@ export const generateAudioFunction = inngest.createFunction(
                 return result;
             });
 
-            // Step 4: Finalize Sentence and Job
+            // Step 4: Transcribe with Whisper for word-level timings (karaoke support)
+            const wordTimings = await step.run('transcribe-for-word-timings', async (): Promise<WordTimingData[]> => {
+                const whisper = createWhisperClient();
+
+                // Check if Whisper service is available
+                const isAvailable = await whisper.healthCheck();
+                if (!isAvailable) {
+                    console.warn('Whisper service unavailable, skipping word timing extraction');
+                    return [];
+                }
+
+                try {
+                    await jobService.updateProgressWithBroadcast(job.id, 70, {
+                        projectId,
+                        jobType: 'audio',
+                        sentenceId,
+                        message: 'Extracting word timings...',
+                    });
+
+                    const transcription = await whisper.transcribe(audioResult.filePath, 'en');
+
+                    // Convert Whisper word timings to our format (times already relative to 0)
+                    return transcription.words.map((w) => ({
+                        word: w.word.trim(),
+                        startMs: Math.round(w.start * 1000),
+                        endMs: Math.round(w.end * 1000),
+                        probability: w.probability,
+                    }));
+                } catch (error) {
+                    console.error('Whisper transcription failed, continuing without word timings:', error);
+                    return [];
+                }
+            });
+
+            // Step 5: Finalize Sentence and Job
             await step.run('finalize-generation', async () => {
-                // Update sentence with asset info
+                // Update sentence with asset info and word timings
                 await db.update(sentences)
                     .set({
                         audioFile: audioResult.filePath,
                         audioDuration: audioResult.durationMs,
+                        wordTimings: wordTimings.length > 0 ? wordTimings : undefined,
                         isAudioDirty: false,
                         status: 'completed',
                         updatedAt: new Date(),

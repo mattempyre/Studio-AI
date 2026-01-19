@@ -63,7 +63,7 @@ export type StudioEvents = {
     };
   };
 
-  // Audio generation events
+  // Audio generation events (per-sentence)
   'audio/generate': {
     data: {
       sentenceId: string;
@@ -78,6 +78,33 @@ export type StudioEvents = {
       projectId: string;
       audioFile: string;
       duration: number;
+    };
+  };
+
+  // Section-level audio generation (batch mode with Whisper alignment)
+  'audio/generate-section': {
+    data: {
+      sectionId: string;
+      projectId: string;
+      voiceId: string;
+      sentenceTexts: Array<{
+        sentenceId: string;
+        text: string;
+        order: number;
+      }>;
+    };
+  };
+  'audio/section-completed': {
+    data: {
+      sectionId: string;
+      projectId: string;
+      audioFile: string;
+      totalDuration: number;
+      sentenceTimings: Array<{
+        sentenceId: string;
+        startMs: number;
+        endMs: number;
+      }>;
     };
   };
 

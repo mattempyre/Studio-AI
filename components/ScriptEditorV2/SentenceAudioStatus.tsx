@@ -22,8 +22,12 @@ interface SentenceAudioStatusProps {
   existingAudioFile?: string | null;
   /** Existing audio duration in ms */
   existingDuration?: number | null;
+  /** Section audio file (for batch generation) */
+  sectionAudioFile?: string | null;
+  /** Section ID for karaoke sync */
+  sectionId?: string;
   /** Called when play button is clicked */
-  onPlayAudio?: (audioUrl: string) => void;
+  onPlayAudio?: (audioUrl: string, label?: string, sectionId?: string) => void;
 }
 
 export const SentenceAudioStatus: React.FC<SentenceAudioStatusProps> = ({
@@ -31,6 +35,8 @@ export const SentenceAudioStatus: React.FC<SentenceAudioStatusProps> = ({
   isAudioDirty,
   existingAudioFile,
   existingDuration,
+  sectionAudioFile,
+  sectionId,
   onPlayAudio,
 }) => {
   // Determine what to show based on state
@@ -41,13 +47,15 @@ export const SentenceAudioStatus: React.FC<SentenceAudioStatusProps> = ({
   const newDuration = audioState?.audioDuration;
 
   // Use new audio if available, otherwise fall back to existing
-  const audioFile = newAudioFile || existingAudioFile;
+  // Prefer section audio file for karaoke playback (has word timings)
+  const audioFile = sectionAudioFile || newAudioFile || existingAudioFile;
   const duration = newDuration || existingDuration;
 
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (audioFile && onPlayAudio) {
-      onPlayAudio(audioFile);
+      // Pass sectionId for karaoke sync when playing section audio
+      onPlayAudio(audioFile, undefined, sectionAudioFile ? sectionId : undefined);
     }
   };
 

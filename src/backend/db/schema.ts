@@ -60,6 +60,10 @@ export const sentences = sqliteTable('sentences', {
   // Generated asset files
   audioFile: text('audio_file'),
   audioDuration: integer('audio_duration'), // milliseconds
+  audioStartMs: integer('audio_start_ms'), // Start time in section audio (for batch generation)
+  audioEndMs: integer('audio_end_ms'), // End time in section audio (for batch generation)
+  sectionAudioFile: text('section_audio_file'), // Path to section-level audio file (for batch generation)
+  wordTimings: text('word_timings', { mode: 'json' }).$type<WordTimingData[]>(), // Word-level timing for karaoke highlighting
   imageFile: text('image_file'),
   videoFile: text('video_file'),
 
@@ -100,6 +104,14 @@ export interface SectionOutline {
   targetMinutes: number;
   keyPoints: string[];
   status: 'pending' | 'generating' | 'completed' | 'failed';
+}
+
+// Word timing interface for karaoke-style highlighting
+export interface WordTimingData {
+  word: string;
+  startMs: number; // milliseconds relative to sentence start
+  endMs: number;
+  probability: number; // confidence from Whisper (0-1)
 }
 
 // Generation models table - ComfyUI workflow configurations

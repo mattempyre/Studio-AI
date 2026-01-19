@@ -382,6 +382,57 @@ projectsRouter.delete('/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/v1/projects/:id/mark-audio-dirty - Mark all sentences as needing audio regeneration
+projectsRouter.post('/:id/mark-audio-dirty', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get all section IDs for this project
+    const projectSections = await db.select()
+      .from(sections)
+      .where(eq(sections.projectId, id));
+
+    if (projectSections.length === 0) {
+      return res.json({
+        success: true,
+        data: { markedCount: 0, message: 'Project has no sections' },
+      });
+    }
+
+    const sectionIds = projectSections.map(s => s.id);
+
+    // Mark all sentences in these sections as audio dirty
+    const result = await db.update(sentences)
+      .set({ isAudioDirty: true })
+      .where(inArray(sentences.sectionId, sectionIds));
+
+    // Count affected sentences
+    const countResult = await db.select({ count: sql<number>`count(*)` })
+      .from(sentences)
+      .where(inArray(sentences.sectionId, sectionIds));
+    const markedCount = countResult[0]?.count ?? 0;
+
+    res.json({
+      success: true,
+      data: {
+        markedCount,
+        message: `Marked ${markedCount} sentences for audio regeneration`,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/v1/projects/:id/generate-audio - Queue audio generation for all dirty sentences
 projectsRouter.post('/:id/generate-audio', async (req, res, next) => {
   try {
@@ -474,6 +525,122 @@ projectsRouter.post('/:id/generate-audio', async (req, res, next) => {
         total: dirtySentences.length,
         jobs: queuedJobs,
         message: `Queued ${queuedJobs.length} audio generation jobs`,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/projects/:id/generate-section-audio - Queue section-based audio generation (batch mode with Whisper)
+projectsRouter.post('/:id/generate-section-audio', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { sectionId } = req.body; // Optional: specific section, or all sections if not provided
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get sections to process
+    let sectionsToProcess;
+    if (sectionId) {
+      // Process specific section
+      const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+      if (!section) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Section not found' },
+        });
+      }
+      sectionsToProcess = [section];
+    } else {
+      // Process all sections in the project
+      sectionsToProcess = await db.select()
+        .from(sections)
+        .where(eq(sections.projectId, id))
+        .orderBy(sections.order);
+    }
+
+    if (sectionsToProcess.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_SECTIONS', message: 'Project has no sections' },
+      });
+    }
+
+    // Queue section audio generation jobs
+    const queuedSections: { sectionId: string; jobId: string; sentenceCount: number }[] = [];
+
+    for (const section of sectionsToProcess) {
+      // Get dirty sentences for this section
+      const dirtySentences = await db.select()
+        .from(sentences)
+        .where(and(
+          eq(sentences.sectionId, section.id),
+          eq(sentences.isAudioDirty, true)
+        ))
+        .orderBy(sentences.order);
+
+      // Filter out empty sentences
+      const validSentences = dirtySentences.filter(s => s.text && s.text.trim().length > 0);
+
+      if (validSentences.length === 0) {
+        continue; // Skip sections with no dirty sentences
+      }
+
+      // Create job record for tracking
+      const job = await jobService.create({
+        projectId: id,
+        jobType: 'audio',
+      });
+
+      // Queue the section audio generation event
+      await inngest.send({
+        name: 'audio/generate-section',
+        data: {
+          sectionId: section.id,
+          projectId: id,
+          voiceId: project.voiceId || 'Emily',
+          sentenceTexts: validSentences.map(s => ({
+            sentenceId: s.id,
+            text: s.text,
+            order: s.order,
+          })),
+        },
+      });
+
+      queuedSections.push({
+        sectionId: section.id,
+        jobId: job.id,
+        sentenceCount: validSentences.length,
+      });
+    }
+
+    if (queuedSections.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          queued: 0,
+          message: 'All sections already have up-to-date audio',
+        },
+      });
+    }
+
+    const totalSentences = queuedSections.reduce((sum, s) => sum + s.sentenceCount, 0);
+
+    res.json({
+      success: true,
+      data: {
+        queued: queuedSections.length,
+        totalSentences,
+        sections: queuedSections,
+        message: `Queued ${queuedSections.length} section(s) with ${totalSentences} sentences for batch audio generation`,
       },
     });
   } catch (error) {

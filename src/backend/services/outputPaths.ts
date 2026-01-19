@@ -141,6 +141,10 @@ export function getAudioPath(projectId: string, sentenceId: string): string {
   return path.join(getProjectMediaDir(projectId, 'audio'), `${sentenceId}.wav`);
 }
 
+export function getSectionAudioPath(projectId: string, sectionId: string): string {
+  return path.join(getProjectMediaDir(projectId, 'audio'), `section_${sectionId}.wav`);
+}
+
 export function getImagePath(projectId: string, sentenceId: string): string {
   return path.join(getProjectMediaDir(projectId, 'images'), `${sentenceId}.png`);
 }

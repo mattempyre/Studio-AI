@@ -4,6 +4,7 @@
  *
  * Features:
  * - "Generate All" button to queue audio for all dirty sentences
+ * - Mode toggle: per-sentence (individual) vs per-section (batch with Whisper)
  * - Overall progress bar during generation
  * - Cancel button for queued jobs
  * - Status summary (X of Y complete)
@@ -11,6 +12,7 @@
 
 import React from 'react';
 import * as Icons from '../Icons';
+import type { AudioGenerationMode } from '../../hooks/useAudioGeneration';
 
 interface AudioToolbarProps {
   /** Whether audio generation is currently in progress */
@@ -27,10 +29,16 @@ interface AudioToolbarProps {
   failedCount: number;
   /** Overall progress percentage (0-100) */
   overallProgress: number;
+  /** Current generation mode */
+  mode: AudioGenerationMode;
+  /** Called when mode is changed */
+  onModeChange: (mode: AudioGenerationMode) => void;
   /** Called when "Generate All" is clicked */
   onGenerateAll: () => void;
   /** Called when "Cancel" is clicked */
   onCancelAll: () => void;
+  /** Called when "Force Regenerate" is clicked */
+  onForceRegenerate: () => void;
   /** Error message if any */
   error?: string | null;
 }
@@ -43,8 +51,11 @@ export const AudioToolbar: React.FC<AudioToolbarProps> = ({
   completedCount,
   failedCount,
   overallProgress,
+  mode,
+  onModeChange,
   onGenerateAll,
   onCancelAll,
+  onForceRegenerate,
   error,
 }) => {
   const showProgress = isGenerating || (completedCount > 0 || failedCount > 0);
@@ -53,6 +64,36 @@ export const AudioToolbar: React.FC<AudioToolbarProps> = ({
 
   return (
     <div className="flex items-center gap-4 px-4 py-3 bg-surface-2 border border-border-subtle rounded-xl">
+      {/* Mode Toggle */}
+      <div className="flex items-center gap-1 p-1 bg-surface-0 rounded-lg">
+        <button
+          onClick={() => onModeChange('per-sentence')}
+          disabled={isGenerating}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+            mode === 'per-sentence'
+              ? 'bg-surface-2 text-text-primary shadow-sm'
+              : 'text-text-muted hover:text-text-secondary'
+          } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title="Generate audio for each sentence individually"
+        >
+          <Icons.List size={12} />
+          Individual
+        </button>
+        <button
+          onClick={() => onModeChange('per-section')}
+          disabled={isGenerating}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+            mode === 'per-section'
+              ? 'bg-surface-2 text-text-primary shadow-sm'
+              : 'text-text-muted hover:text-text-secondary'
+          } ${isGenerating ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title="Batch generate by section (faster, uses Whisper for timing)"
+        >
+          <Icons.Layers size={12} />
+          Batch
+        </button>
+      </div>
+
       {/* Generate/Cancel Button */}
       <div className="flex items-center gap-2">
         {isGenerating ? (
@@ -129,11 +170,22 @@ export const AudioToolbar: React.FC<AudioToolbarProps> = ({
         </div>
       )}
 
-      {/* Idle Status */}
+      {/* Idle Status with Regenerate Option */}
       {!showProgress && dirtySentenceCount === 0 && (
-        <div className="flex items-center gap-2 text-xs text-text-muted">
-          <Icons.CheckCircle size={14} className="text-green-400" />
-          All audio up to date
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-text-muted">
+            <Icons.CheckCircle size={14} className="text-green-400" />
+            All audio up to date
+          </div>
+          <button
+            onClick={onForceRegenerate}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-muted hover:text-text-secondary hover:bg-surface-0 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Regenerate all audio from scratch"
+          >
+            <Icons.RefreshCw size={12} />
+            Regenerate All
+          </button>
         </div>
       )}
 

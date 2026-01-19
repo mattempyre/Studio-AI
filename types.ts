@@ -16,6 +16,14 @@ export interface ScriptSection {
   audioUrl?: string; // New field for persisting generated audio
 }
 
+// Word timing data for karaoke-style highlighting
+export interface WordTimingData {
+  word: string;
+  startMs: number; // milliseconds relative to sentence start
+  endMs: number;
+  probability: number; // confidence from Whisper (0-1)
+}
+
 // Backend data model types (sections/sentences structure)
 export interface BackendSentence {
   id: string;
@@ -26,10 +34,17 @@ export interface BackendSentence {
   videoPrompt: string | null;
   cameraMovement: string;
   motionStrength: number;
+  // Audio fields
   audioFile: string | null;
   audioDuration: number | null;
+  audioStartMs: number | null; // Start time in section audio (batch generation)
+  audioEndMs: number | null; // End time in section audio (batch generation)
+  sectionAudioFile: string | null; // Path to section-level audio (batch generation)
+  wordTimings: WordTimingData[] | null; // Word-level timings for karaoke highlighting
+  // Image/video fields
   imageFile: string | null;
   videoFile: string | null;
+  // Dirty flags
   isAudioDirty: boolean;
   isImageDirty: boolean;
   isVideoDirty: boolean;

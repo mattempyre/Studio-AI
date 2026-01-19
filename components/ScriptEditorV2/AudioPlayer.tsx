@@ -14,12 +14,21 @@ interface AudioPlayerProps {
   onClose: () => void;
   /** Optional label for the current track */
   trackLabel?: string;
+  /** ID of the section being played (for karaoke sync) */
+  sectionId?: string | null;
+  /** Called with current time in milliseconds during playback (for karaoke sync) */
+  onTimeUpdate?: (timeMs: number) => void;
+  /** Called when play/pause state changes (for karaoke sync) */
+  onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
 export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   audioUrl,
   onClose,
   trackLabel,
+  sectionId,
+  onTimeUpdate,
+  onPlayStateChange,
 }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -115,6 +124,16 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       audioRef.current.volume = isMuted ? 0 : volume;
     }
   }, [volume, isMuted]);
+
+  // Notify parent of time updates (for karaoke sync)
+  useEffect(() => {
+    onTimeUpdate?.(Math.round(currentTime * 1000));
+  }, [currentTime, onTimeUpdate]);
+
+  // Notify parent of play state changes (for karaoke sync)
+  useEffect(() => {
+    onPlayStateChange?.(isPlaying);
+  }, [isPlaying, onPlayStateChange]);
 
   // Toggle play/pause
   const togglePlayPause = useCallback(() => {

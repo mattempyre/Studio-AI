@@ -19,6 +19,24 @@ services:
       timeout: 5s
       retries: 3
 
+  # Whisper Transcription Service - Word-level timestamps for audio segmentation
+  whisper:
+    build: ./services/whisper
+    ports:
+      - "${WHISPER_PORT:-8005}:8005"
+    volumes:
+      - ./data/projects:/data/projects:ro  # Read-only access to audio files
+    environment:
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-base}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
 # Future services (to be added in later stories):
 #
 # Note: Chatterbox TTS is expected to be running externally on port 8004

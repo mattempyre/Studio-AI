@@ -41,7 +41,18 @@ export interface CancelResult {
   message: string;
 }
 
+export type AudioGenerationMode = 'per-sentence' | 'per-section';
+
+export interface SectionGenerationResult {
+  queued: number;
+  totalSentences: number;
+  sections: Array<{ sectionId: string; jobId: string; sentenceCount: number }>;
+  message: string;
+}
+
 export interface UseAudioGenerationOptions {
+  /** Generation mode: 'per-sentence' (individual) or 'per-section' (batch with Whisper) */
+  mode?: AudioGenerationMode;
   /** Called when any sentence audio completes */
   onSentenceComplete?: (sentenceId: string, audioFile: string, duration?: number) => void;
   /** Called when any sentence audio fails */
@@ -65,14 +76,20 @@ export interface UseAudioGenerationReturn {
   failedCount: number;
   /** Overall progress percentage (0-100) */
   overallProgress: number;
+  /** Current generation mode */
+  mode: AudioGenerationMode;
   /** Start bulk audio generation for all dirty sentences */
-  generateAll: () => Promise<BulkGenerationResult | null>;
+  generateAll: () => Promise<BulkGenerationResult | SectionGenerationResult | null>;
   /** Cancel all queued generation jobs */
   cancelAll: () => Promise<CancelResult | null>;
+  /** Switch generation mode */
+  setMode: (mode: AudioGenerationMode) => void;
   /** Get the status of a specific sentence */
   getSentenceStatus: (sentenceId: string) => SentenceAudioState | undefined;
   /** Clear all generation states */
   clearStates: () => void;
+  /** Force regenerate all audio (marks all as dirty first) */
+  forceRegenerate: () => Promise<BulkGenerationResult | SectionGenerationResult | null>;
   /** Error message if generation failed to start */
   error: string | null;
 }
@@ -87,12 +104,13 @@ export function useAudioGeneration(
   projectId: string | null,
   options: UseAudioGenerationOptions = {}
 ): UseAudioGenerationReturn {
-  const { onSentenceComplete, onSentenceFailed, onAllComplete } = options;
+  const { mode: initialMode = 'per-sentence', onSentenceComplete, onSentenceFailed, onAllComplete } = options;
 
   // State
   const [sentenceStates, setSentenceStates] = useState<Map<string, SentenceAudioState>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<AudioGenerationMode>(initialMode);
 
   // WebSocket integration for real-time progress
   const { status: wsStatus } = useWebSocket(projectId, {
@@ -194,8 +212,8 @@ export function useAudioGeneration(
     }
   }, [sentenceStates, isGenerating, isLoading, completedCount, failedCount, onAllComplete]);
 
-  // Generate audio for all dirty sentences
-  const generateAll = useCallback(async (): Promise<BulkGenerationResult | null> => {
+  // Generate audio for all dirty sentences (supports both modes)
+  const generateAll = useCallback(async (): Promise<BulkGenerationResult | SectionGenerationResult | null> => {
     if (!projectId) {
       setError('No project selected');
       return null;
@@ -205,7 +223,12 @@ export function useAudioGeneration(
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/v1/projects/${projectId}/generate-audio`, {
+      // Choose endpoint based on mode
+      const endpoint = mode === 'per-section'
+        ? `${API_BASE}/api/v1/projects/${projectId}/generate-section-audio`
+        : `${API_BASE}/api/v1/projects/${projectId}/generate-audio`;
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -216,25 +239,38 @@ export function useAudioGeneration(
       }
 
       const result = await response.json();
-      const data = result.data as BulkGenerationResult;
 
-      // Initialize sentence states for queued jobs (if any)
-      if (data.jobs && data.jobs.length > 0) {
-        setSentenceStates(prev => {
-          const updated = new Map(prev);
-          for (const job of data.jobs) {
-            updated.set(job.sentenceId, {
-              sentenceId: job.sentenceId,
-              jobId: job.jobId,
-              status: 'queued',
-              progress: 0,
-            });
-          }
-          return updated;
-        });
+      if (mode === 'per-section') {
+        // Section mode: initialize states for all sentences in queued sections
+        const data = result.data as SectionGenerationResult;
+
+        // Note: In section mode, we don't have individual sentence job IDs
+        // The WebSocket updates will come when sections complete
+        // For now, we can mark sections as queued (not individual sentences)
+
+        return data;
+      } else {
+        // Per-sentence mode: existing behavior
+        const data = result.data as BulkGenerationResult;
+
+        // Initialize sentence states for queued jobs (if any)
+        if (data.jobs && data.jobs.length > 0) {
+          setSentenceStates(prev => {
+            const updated = new Map(prev);
+            for (const job of data.jobs) {
+              updated.set(job.sentenceId, {
+                sentenceId: job.sentenceId,
+                jobId: job.jobId,
+                status: 'queued',
+                progress: 0,
+              });
+            }
+            return updated;
+          });
+        }
+
+        return data;
       }
-
-      return data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
@@ -242,7 +278,7 @@ export function useAudioGeneration(
     } finally {
       setIsLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, mode]);
 
   // Cancel all queued jobs
   const cancelAll = useCallback(async (): Promise<CancelResult | null> => {
@@ -304,6 +340,74 @@ export function useAudioGeneration(
     setError(null);
   }, []);
 
+  // Force regenerate all audio (marks all as dirty first, then generates)
+  const forceRegenerate = useCallback(async (): Promise<BulkGenerationResult | SectionGenerationResult | null> => {
+    if (!projectId) {
+      setError('No project selected');
+      return null;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // First, mark all audio as dirty
+      const markResponse = await fetch(`${API_BASE}/api/v1/projects/${projectId}/mark-audio-dirty`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!markResponse.ok) {
+        const errorData = await markResponse.json().catch(() => ({ error: { message: 'Request failed' } }));
+        throw new Error(errorData.error?.message || 'Failed to mark audio for regeneration');
+      }
+
+      // Then trigger generation (reuse generateAll logic but inline to avoid dependency issues)
+      const endpoint = mode === 'per-section'
+        ? `${API_BASE}/api/v1/projects/${projectId}/generate-section-audio`
+        : `${API_BASE}/api/v1/projects/${projectId}/generate-audio`;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: { message: 'Request failed' } }));
+        throw new Error(errorData.error?.message || 'Failed to start audio generation');
+      }
+
+      const result = await response.json();
+
+      if (mode === 'per-section') {
+        return result.data as SectionGenerationResult;
+      } else {
+        const data = result.data as BulkGenerationResult;
+        if (data.jobs && data.jobs.length > 0) {
+          setSentenceStates(prev => {
+            const updated = new Map(prev);
+            for (const job of data.jobs) {
+              updated.set(job.sentenceId, {
+                sentenceId: job.sentenceId,
+                jobId: job.jobId,
+                status: 'queued',
+                progress: 0,
+              });
+            }
+            return updated;
+          });
+        }
+        return data;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [projectId, mode]);
+
   return {
     sentenceStates,
     isGenerating,
@@ -312,10 +416,13 @@ export function useAudioGeneration(
     completedCount,
     failedCount,
     overallProgress,
+    mode,
     generateAll,
     cancelAll,
+    setMode,
     getSentenceStatus,
     clearStates,
+    forceRegenerate,
     error,
   };
 }

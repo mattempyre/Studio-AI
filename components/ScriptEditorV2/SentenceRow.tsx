@@ -4,6 +4,7 @@ import { BackendSentence } from '../../types';
 import { debounce, STATUS_COLORS } from './utils';
 import { DirtyIndicator } from './DirtyIndicator';
 import { SentenceAudioStatus } from './SentenceAudioStatus';
+import { KaraokeText } from './KaraokeText';
 import type { SentenceAudioState } from '../../hooks/useAudioGeneration';
 
 export const SentenceRow: React.FC<{
@@ -22,7 +23,11 @@ export const SentenceRow: React.FC<{
     isDragging: boolean;
     isDragOver: boolean;
     audioState?: SentenceAudioState;
-    onPlayAudio?: (audioUrl: string) => void;
+    onPlayAudio?: (audioUrl: string, label?: string, sectionId?: string) => void;
+    // Karaoke sync props
+    currentAudioTimeMs?: number;
+    isAudioPlaying?: boolean;
+    activeSectionId?: string | null;
 }> = ({
     sentence,
     index,
@@ -40,6 +45,10 @@ export const SentenceRow: React.FC<{
     isDragOver,
     audioState,
     onPlayAudio,
+    // Karaoke sync
+    currentAudioTimeMs = 0,
+    isAudioPlaying = false,
+    activeSectionId = null,
 }) => {
         const [editText, setEditText] = useState(sentence.text);
         const [isAutoSaving, setIsAutoSaving] = useState(false);
@@ -193,9 +202,24 @@ export const SentenceRow: React.FC<{
                     ) : (
                         <div
                             onClick={onStartEdit}
-                            className="text-sm text-white/90 leading-relaxed cursor-text hover:text-white transition-colors"
+                            className="text-sm leading-relaxed cursor-text hover:text-white transition-colors"
                         >
-                            {sentence.text}
+                            {/* Use KaraokeText when this section's audio is playing and we have word timings */}
+                            {activeSectionId === sentence.sectionId &&
+                             isAudioPlaying &&
+                             sentence.wordTimings &&
+                             sentence.wordTimings.length > 0 ? (
+                                <KaraokeText
+                                    text={sentence.text}
+                                    wordTimings={sentence.wordTimings}
+                                    currentTimeMs={currentAudioTimeMs}
+                                    isPlaying={isAudioPlaying}
+                                    sentenceStartMs={sentence.audioStartMs || 0}
+                                    sentenceEndMs={sentence.audioEndMs || 0}
+                                />
+                            ) : (
+                                <span className="text-white/90">{sentence.text}</span>
+                            )}
                         </div>
                     )}
 
@@ -216,6 +240,8 @@ export const SentenceRow: React.FC<{
                                 isAudioDirty={sentence.isAudioDirty}
                                 existingAudioFile={sentence.audioFile}
                                 existingDuration={sentence.audioDuration}
+                                sectionAudioFile={sentence.sectionAudioFile}
+                                sectionId={sentence.sectionId}
                                 onPlayAudio={onPlayAudio}
                             />
                         </div>

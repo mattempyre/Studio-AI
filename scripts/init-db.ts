@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS sentences (
   motion_strength REAL DEFAULT 0.5 NOT NULL,
   audio_file TEXT,
   audio_duration INTEGER,
+  audio_start_ms INTEGER,
+  audio_end_ms INTEGER,
+  section_audio_file TEXT,
+  word_timings TEXT,
   image_file TEXT,
   video_file TEXT,
   is_audio_dirty INTEGER DEFAULT 1 NOT NULL,
@@ -176,6 +180,31 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON generation_jobs(status);
 // Run schema creation
 db.exec(createTables);
 console.log('Database tables created successfully!');
+
+// Migrations for existing databases - add new columns if they don't exist
+const migrations = [
+  // STORY-3-3: Add audio timing columns for batch generation
+  `ALTER TABLE sentences ADD COLUMN audio_start_ms INTEGER`,
+  `ALTER TABLE sentences ADD COLUMN audio_end_ms INTEGER`,
+  `ALTER TABLE sentences ADD COLUMN section_audio_file TEXT`,
+  // Add word-level timing for karaoke highlighting
+  `ALTER TABLE sentences ADD COLUMN word_timings TEXT`,
+];
+
+// Run migrations (ignore errors for columns that already exist)
+console.log('\nRunning migrations...');
+for (const migration of migrations) {
+  try {
+    db.prepare(migration).run();
+    console.log('  Applied:', migration.substring(0, 60) + '...');
+  } catch (err: unknown) {
+    const error = err as Error;
+    // Ignore "duplicate column name" errors
+    if (!error.message.includes('duplicate column name')) {
+      console.log('  Skipped:', error.message);
+    }
+  }
+}
 
 // Verify tables
 const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
