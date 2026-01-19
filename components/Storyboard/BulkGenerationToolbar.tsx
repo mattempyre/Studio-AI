@@ -14,6 +14,7 @@ import * as Icons from '../Icons';
 import { Button } from '../ui/button';
 import { useSceneGeneration, type FailedSentence } from '../../hooks/useSceneGeneration';
 import ErrorSummaryDialog from './ErrorSummaryDialog';
+import RegenerateWarningModal from './RegenerateWarningModal';
 
 interface BulkGenerationToolbarProps {
   projectId: string | null;
@@ -32,6 +33,7 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
   onVideoComplete,
 }) => {
   const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [completionNotification, setCompletionNotification] = useState<string | null>(null);
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -46,6 +48,9 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
     failedCount,
     failedSentences,
     completedCount,
+    sceneStats,
+    hasExistingContent,
+    fetchSceneStats,
     generateAll,
     cancelAll,
     retryFailed,
@@ -83,13 +88,24 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
     };
   }, []);
 
-  const handleGenerateAll = async () => {
+  // Handle button click - show modal if content exists, otherwise generate directly
+  const handleButtonClick = () => {
+    if (hasExistingContent) {
+      setShowRegenerateModal(true);
+    } else {
+      handleGenerateAll(false);
+    }
+  };
+
+  // Generate all images (no force - only generates missing/dirty)
+  // Note: Videos are generated separately after user reviews images
+  const handleGenerateAll = async (force: boolean) => {
     clearStates();
-    const result = await generateAll(true); // Include videos
+    const result = await generateAll(false, force); // includeVideos=false
     if (result) {
-      const total = result.queued.images + result.queued.videos;
+      const total = result.queued.images;
       if (total === 0) {
-        setCompletionNotification('All scenes already up-to-date!');
+        setCompletionNotification('All images already up-to-date!');
         if (notificationTimeoutRef.current) {
           clearTimeout(notificationTimeoutRef.current);
         }
@@ -98,6 +114,28 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
         }, 3000);
       }
     }
+  };
+
+  // Handle regenerate confirmation from modal
+  const handleRegenerateConfirm = async () => {
+    setShowRegenerateModal(false);
+    // Only regenerate images, not videos - user should review images first
+    clearStates();
+    const result = await generateAll(false, true); // includeVideos=false, force=true
+    if (result) {
+      const total = result.queued.images;
+      if (total === 0) {
+        setCompletionNotification('All images already up-to-date!');
+        if (notificationTimeoutRef.current) {
+          clearTimeout(notificationTimeoutRef.current);
+        }
+        notificationTimeoutRef.current = setTimeout(() => {
+          setCompletionNotification(null);
+        }, 3000);
+      }
+    }
+    // Refresh scene stats after regeneration completes
+    fetchSceneStats();
   };
 
   const handleCancel = async () => {
@@ -139,10 +177,20 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
       );
     }
 
+    // Show "Re-Generate" if content already exists
+    if (hasExistingContent) {
+      return (
+        <>
+          <Icons.RefreshCw size={16} />
+          Re-Generate Images
+        </>
+      );
+    }
+
     return (
       <>
         <Icons.Wand2 size={16} />
-        Generate All Scenes
+        Generate All Images
       </>
     );
   };
@@ -152,9 +200,9 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
       {/* Generate Button */}
       <Button
         variant={isGenerating ? 'outline' : 'default'}
-        onClick={handleGenerateAll}
+        onClick={handleButtonClick}
         disabled={isLoading || isGenerating || !projectId}
-        className="min-w-[180px]"
+        className="min-w-[200px]"
       >
         {getButtonContent()}
       </Button>
@@ -244,6 +292,15 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
         onClose={() => setShowErrorDialog(false)}
         failedSentences={failedSentences}
         onRetry={handleRetryFailed}
+      />
+
+      {/* Regenerate Warning Modal */}
+      <RegenerateWarningModal
+        isOpen={showRegenerateModal}
+        onConfirm={handleRegenerateConfirm}
+        onCancel={() => setShowRegenerateModal(false)}
+        sceneStats={sceneStats}
+        isLoading={isLoading}
       />
     </div>
   );

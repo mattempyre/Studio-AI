@@ -844,12 +844,80 @@ projectsRouter.post('/:id/retroactive-audio-alignment', async (req, res, next) =
   }
 });
 
+// GET /api/v1/projects/:id/scene-stats - Get scene generation statistics
+// Used by BulkGenerationToolbar to determine button state (Generate vs Re-Generate)
+projectsRouter.get('/:id/scene-stats', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get all sections for this project
+    const projectSections = await db.select()
+      .from(sections)
+      .where(eq(sections.projectId, id));
+
+    if (projectSections.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          totalSentences: 0,
+          withImages: 0,
+          withVideos: 0,
+          needingImages: 0,
+          needingVideos: 0,
+        },
+      });
+    }
+
+    const sectionIds = projectSections.map(s => s.id);
+
+    // Get all sentences
+    const allSentences = await db.select()
+      .from(sentences)
+      .where(inArray(sentences.sectionId, sectionIds));
+
+    // Calculate stats
+    const withImages = allSentences.filter(s => s.imageFile && !s.isImageDirty).length;
+    const withVideos = allSentences.filter(s => s.videoFile && !s.isVideoDirty).length;
+    const needingImages = allSentences.filter(s =>
+      s.imagePrompt && s.imagePrompt.trim().length > 0 &&
+      (!s.imageFile || s.isImageDirty)
+    ).length;
+    const needingVideos = allSentences.filter(s =>
+      s.imageFile &&
+      s.videoPrompt && s.videoPrompt.trim().length > 0 &&
+      (!s.videoFile || s.isVideoDirty)
+    ).length;
+
+    res.json({
+      success: true,
+      data: {
+        totalSentences: allSentences.length,
+        withImages,
+        withVideos,
+        needingImages,
+        needingVideos,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/v1/projects/:id/generate-scenes - Queue bulk scene generation (images, then videos)
 // STORY-4-4: Bulk Scene Generation
 projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { includeVideos = true } = req.body; // Option to skip video generation
+    const { includeVideos = true, force = false } = req.body; // force: regenerate all regardless of existing files
 
     // Verify project exists
     const project = await db.select().from(projects).where(eq(projects.id, id)).get();
@@ -876,10 +944,29 @@ projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
     const sectionIds = projectSections.map(s => s.id);
 
     // Get all sentences with their prompts and file status
-    const allSentences = await db.select()
+    let allSentences = await db.select()
       .from(sentences)
       .where(inArray(sentences.sectionId, sectionIds))
       .orderBy(sentences.order);
+
+    // If force=true, mark all sentences with prompts as dirty to force regeneration
+    if (force) {
+      const sentenceIdsToMarkDirty = allSentences
+        .filter(s => s.imagePrompt && s.imagePrompt.trim().length > 0)
+        .map(s => s.id);
+
+      if (sentenceIdsToMarkDirty.length > 0) {
+        await db.update(sentences)
+          .set({ isImageDirty: true, isVideoDirty: true })
+          .where(inArray(sentences.id, sentenceIdsToMarkDirty));
+
+        // Re-fetch sentences to get updated dirty flags
+        allSentences = await db.select()
+          .from(sentences)
+          .where(inArray(sentences.sectionId, sectionIds))
+          .orderBy(sentences.order);
+      }
+    }
 
     // Sentences needing images: have imagePrompt but no imageFile (or isImageDirty)
     const sentencesNeedingImages = allSentences.filter(s =>
@@ -904,30 +991,59 @@ projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
       });
     }
 
-    // Queue image generation jobs
-    const imageJobs: { sentenceId: string; jobId: string }[] = [];
+    // Group sentences by (modelId, styleId) for batch processing
+    // This minimizes ComfyUI model reloads by processing all images with same model together
+    const modelId = project.modelId || 'default';
+    const styleId = project.styleId || 'default';
+    const batchKey = `${modelId}:${styleId}`;
 
-    for (const sentence of sentencesNeedingImages) {
-      // Create job record for tracking
-      const job = await jobService.create({
-        sentenceId: sentence.id,
+    // For now, all sentences in a project use the same model/style, so we have one batch
+    // Future: could support per-sentence model overrides by grouping differently
+    const batchGroups = new Map<string, typeof sentencesNeedingImages>();
+    batchGroups.set(batchKey, sentencesNeedingImages);
+
+    // Queue batch image generation jobs
+    const imageJobs: { sentenceId: string; batchId: string }[] = [];
+    const batchJobs: { batchId: string; modelId: string; styleId: string; count: number }[] = [];
+
+    for (const [key, groupSentences] of batchGroups) {
+      if (groupSentences.length === 0) continue;
+
+      const [groupModelId, groupStyleId] = key.split(':');
+      const batchId = nanoid();
+
+      // Create batch job record for tracking
+      const batchJob = await jobService.create({
         projectId: id,
-        jobType: 'image',
+        jobType: 'image-batch',
       });
 
-      // Queue the Inngest event
+      // Queue the batch Inngest event
       await inngest.send({
-        name: 'image/generate',
+        name: 'image/generate-batch',
         data: {
-          sentenceId: sentence.id,
+          batchId: batchJob.id,
           projectId: id,
-          prompt: sentence.imagePrompt!,
-          modelId: project.modelId || undefined,
-          styleId: project.styleId || undefined,
+          modelId: groupModelId,
+          styleId: groupStyleId,
+          sentences: groupSentences.map(s => ({
+            sentenceId: s.id,
+            prompt: s.imagePrompt!,
+          })),
         },
       });
 
-      imageJobs.push({ sentenceId: sentence.id, jobId: job.id });
+      // Track all sentences in this batch
+      for (const sentence of groupSentences) {
+        imageJobs.push({ sentenceId: sentence.id, batchId: batchJob.id });
+      }
+
+      batchJobs.push({
+        batchId: batchJob.id,
+        modelId: groupModelId,
+        styleId: groupStyleId,
+        count: groupSentences.length,
+      });
     }
 
     // Queue video generation jobs (will run after images complete due to dependency)
@@ -963,11 +1079,13 @@ projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
         queued: {
           images: imageJobs.length,
           videos: videoJobs.length,
+          batches: batchJobs.length,
         },
         totalSentences: allSentences.length,
-        imageJobs,
+        batchJobs,  // Model-aware batch info
+        imageJobs,  // Per-sentence tracking (for UI progress)
         videoJobs,
-        message: `Queued ${imageJobs.length} image and ${videoJobs.length} video generation jobs`,
+        message: `Queued ${batchJobs.length} image batch(es) with ${imageJobs.length} total images and ${videoJobs.length} video jobs`,
       },
     });
   } catch (error) {

@@ -2,9 +2,15 @@
 
 **Date:** 2026-01-19 (Updated)
 **Architect:** System Architect (BMAD)
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Approved
 
+> **Changelog v1.2 (2026-01-19):**
+> - Added model-aware image batching (`generateImageBatchFunction`) to minimize ComfyUI model reloads
+> - Added `image/generate-batch` event type for batch image generation
+> - Added `image-batch` job type for tracking batch jobs
+> - Updated `/generate-scenes` endpoint to group sentences by model/style before queueing
+>
 > **Changelog v1.1 (2026-01-19):**
 > - Added new database tables: `generationModels`, `visualStyles`
 > - Added WhisperClient for audio transcription/alignment
@@ -526,6 +532,7 @@ class JobService {
 | `generateImagePromptsFunction` | `prompts/generate-image` | LLM-generated image prompts | 1 |
 | `generateVideoPromptsFunction` | `prompts/generate-video` | LLM-generated video prompts | 1 |
 | `generateImageFunction` | `image/generate` | Image for single sentence | 1 |
+| `generateImageBatchFunction` | `image/generate-batch` | Batch images with same model/style | 1 |
 
 **Planned Functions (TODO):**
 
@@ -1672,9 +1679,10 @@ jobs:
 | Visual Styles Table | Database-driven prompt prefixes and LoRA configurations |
 | Style Builder | Admin UI for managing models and styles |
 | Retroactive Audio Alignment | Align existing audio with sentences using Whisper |
+| Model-Aware Image Batching | Groups images by model/style to minimize ComfyUI model reloads |
 
 ---
 
 *Created by BMAD Method v6 - System Architect*
-*Architecture Version: 1.1*
+*Architecture Version: 1.2*
 *Last Updated: 2026-01-19*

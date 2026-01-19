@@ -770,6 +770,162 @@ export class ComfyUIClient {
   }
 
   /**
+   * Queue an image workflow without waiting for completion.
+   * Used for batch processing to keep models loaded in VRAM.
+   * @returns promptId for tracking
+   */
+  async queueImageWorkflow(
+    workflowPath: string,
+    params: ImageGenerationParams
+  ): Promise<{ promptId: string; workflow: ComfyUIWorkflow }> {
+    const workflow = await this.loadWorkflow(workflowPath);
+    const prepared = this.prepareImageWorkflow(workflow, params);
+    const promptId = await this.queueWorkflow(prepared);
+    return { promptId, workflow: prepared };
+  }
+
+  /**
+   * Wait for a batch of prompts to complete and download their outputs.
+   * Processes completions as they happen via WebSocket.
+   */
+  async waitForPromptBatch(
+    promptIds: string[],
+    outputPaths: string[],
+    onEachComplete?: (index: number, outputPath: string) => void | Promise<void>,
+    onProgress?: (completed: number, total: number) => void | Promise<void>
+  ): Promise<string[]> {
+    const results: string[] = new Array(promptIds.length).fill('');
+    const pending = new Set(promptIds);
+    let completed = 0;
+
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`${this.wsUrl}/ws?clientId=${this.clientId}`);
+      let resolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          ws.close();
+          reject(new ComfyUIError('Timeout waiting for batch completion', 'TIMEOUT'));
+        }
+      }, this.timeout);
+
+      const checkComplete = () => {
+        if (pending.size === 0 && !resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          ws.close();
+          resolve(results);
+        }
+      };
+
+      ws.on('message', async (data: Buffer) => {
+        try {
+          const message = JSON.parse(data.toString()) as WSMessage;
+
+          if (message.type === 'executing' && message.data?.prompt_id) {
+            const promptId = message.data.prompt_id;
+            const index = promptIds.indexOf(promptId);
+
+            // null node means execution complete
+            if (message.data.node === null && index !== -1 && pending.has(promptId)) {
+              pending.delete(promptId);
+              completed++;
+
+              try {
+                // Download the output
+                const outputs = await this.getJobOutputs(promptId);
+                if (outputs.length > 0) {
+                  const output = outputs[0];
+                  const savedPath = await this.downloadFile(
+                    output.filename,
+                    output.subfolder,
+                    outputPaths[index]
+                  );
+                  results[index] = savedPath;
+                  await onEachComplete?.(index, savedPath);
+                }
+              } catch (err) {
+                console.error(`Failed to download output for prompt ${promptId}:`, err);
+              }
+
+              await onProgress?.(completed, promptIds.length);
+              checkComplete();
+            }
+          }
+
+          if (message.type === 'execution_error' && message.data?.prompt_id) {
+            const promptId = message.data.prompt_id;
+            if (pending.has(promptId)) {
+              pending.delete(promptId);
+              completed++;
+              console.error(`Execution error for prompt ${promptId}:`, message.data);
+              await onProgress?.(completed, promptIds.length);
+              checkComplete();
+            }
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      });
+
+      ws.on('error', (error) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          reject(new ComfyUIError(`WebSocket error: ${error.message}`, 'WEBSOCKET_ERROR', error));
+        }
+      });
+
+      ws.on('close', () => {
+        // Give a moment for any final processing
+        setTimeout(() => {
+          if (!resolved && pending.size > 0) {
+            // Try to recover by checking status via HTTP
+            this.recoverBatchStatus(promptIds, outputPaths, results, pending)
+              .then(() => {
+                resolved = true;
+                clearTimeout(timeout);
+                resolve(results);
+              })
+              .catch(reject);
+          }
+        }, 1000);
+      });
+    });
+  }
+
+  /**
+   * Recover batch status via HTTP if WebSocket disconnects
+   */
+  private async recoverBatchStatus(
+    promptIds: string[],
+    outputPaths: string[],
+    results: string[],
+    pending: Set<string>
+  ): Promise<void> {
+    for (const promptId of pending) {
+      const index = promptIds.indexOf(promptId);
+      try {
+        const isComplete = await this.checkJobStatus(promptId);
+        if (isComplete) {
+          const outputs = await this.getJobOutputs(promptId);
+          if (outputs.length > 0) {
+            const output = outputs[0];
+            results[index] = await this.downloadFile(
+              output.filename,
+              output.subfolder,
+              outputPaths[index]
+            );
+          }
+        }
+      } catch {
+        // Ignore errors during recovery
+      }
+    }
+  }
+
+  /**
    * Generate an image using the specified workflow
    */
   async generateImage(

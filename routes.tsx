@@ -186,23 +186,100 @@ function StoryboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch project data from backend
-  useEffect(() => {
-    const loadProject = async () => {
-      try {
+  // API base URL for constructing media URLs
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  /**
+   * Convert a file path to a proper media URL.
+   * Handles both new format (/media/projects/...) and legacy format (data/projects/...).
+   */
+  const toMediaUrl = (filePath: string | null | undefined): string | undefined => {
+    if (!filePath) return undefined;
+
+    // Already a media URL
+    if (filePath.startsWith('/media/')) {
+      return `${API_BASE}${filePath}`;
+    }
+
+    // Legacy filesystem path - convert to media URL
+    // Normalize backslashes to forward slashes
+    const normalized = filePath.replace(/\\/g, '/');
+
+    // Extract the part after 'projects/'
+    const projectsMatch = normalized.match(/projects\/(.+)$/);
+    if (projectsMatch) {
+      return `${API_BASE}/media/projects/${projectsMatch[1]}`;
+    }
+
+    // Fallback - try to use as-is
+    return `${API_BASE}${filePath}`;
+  };
+
+  // Load project data from backend
+  // showLoading: if false, don't show loading spinner (used for background refresh)
+  const loadProject = async (showLoading = true) => {
+    try {
+      if (showLoading) {
         setIsLoading(true);
-        setError(null);
-        const data = await projectsApi.get(projectId);
-        setBackendProject(data);
-      } catch (err) {
-        console.error('Failed to load project:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load project');
-      } finally {
+      }
+      setError(null);
+      const data = await projectsApi.get(projectId);
+      setBackendProject(data);
+    } catch (err) {
+      console.error('Failed to load project:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load project');
+    } finally {
+      if (showLoading) {
         setIsLoading(false);
       }
-    };
-    loadProject();
+    }
+  };
+
+  // Fetch project data from backend on mount
+  useEffect(() => {
+    loadProject(true);
   }, [projectId]);
+
+  // Callback when an individual image completes - update local state immediately
+  const handleImageComplete = (sentenceId: string, imageFile: string) => {
+    setBackendProject((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        sections: prev.sections.map((section) => ({
+          ...section,
+          sentences: section.sentences.map((sentence) =>
+            sentence.id === sentenceId
+              ? { ...sentence, imageFile, status: 'completed' as const }
+              : sentence
+          ),
+        })),
+      };
+    });
+  };
+
+  // Callback when an individual video completes - update local state immediately
+  const handleVideoComplete = (sentenceId: string, videoFile: string) => {
+    setBackendProject((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        sections: prev.sections.map((section) => ({
+          ...section,
+          sentences: section.sentences.map((sentence) =>
+            sentence.id === sentenceId
+              ? { ...sentence, videoFile, status: 'completed' as const }
+              : sentence
+          ),
+        })),
+      };
+    });
+  };
+
+  // Callback when all generation completes - refresh from backend to ensure consistency
+  const handleGenerationComplete = () => {
+    loadProject(false); // Don't show loading spinner for background refresh
+  };
 
   if (isLoading) {
     return (
@@ -230,8 +307,6 @@ function StoryboardPage() {
   }
 
   // Transform backend data to Project format for Storyboard component
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-
   // Flatten all sentences from all sections into scenes
   const scenes = backendProject.sections.flatMap((section) =>
     section.sentences.map((sentence) => ({
@@ -241,8 +316,8 @@ function StoryboardPage() {
       narration: sentence.text,
       imagePrompt: sentence.imagePrompt || '',
       videoPrompt: sentence.videoPrompt || undefined,
-      imageUrl: sentence.imageFile ? `${API_BASE}${sentence.imageFile}` : undefined,
-      videoUrl: sentence.videoFile ? `${API_BASE}${sentence.videoFile}` : undefined,
+      imageUrl: toMediaUrl(sentence.imageFile),
+      videoUrl: toMediaUrl(sentence.videoFile),
       cameraMovement: sentence.cameraMovement || 'static',
       visualStyle: backendProject.visualStyle || 'cinematic',
     }))
@@ -276,6 +351,9 @@ function StoryboardPage() {
     <Storyboard
       project={project}
       onUpdateProject={handleProjectUpdate}
+      onImageComplete={handleImageComplete}
+      onVideoComplete={handleVideoComplete}
+      onGenerationComplete={handleGenerationComplete}
       onNext={() =>
         navigate({
           to: '/project/$projectId/video',

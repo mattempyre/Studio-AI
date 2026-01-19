@@ -56,6 +56,14 @@ export interface RetryFailedResult {
   message: string;
 }
 
+export interface SceneStats {
+  totalSentences: number;
+  withImages: number;
+  withVideos: number;
+  needingImages: number;
+  needingVideos: number;
+}
+
 export interface FailedSentence {
   sentenceId: string;
   jobType: 'image' | 'video';
@@ -100,8 +108,14 @@ export interface UseSceneGenerationReturn {
   totalVideos: number;
   /** List of failed sentences */
   failedSentences: FailedSentence[];
+  /** Scene statistics for determining button state */
+  sceneStats: SceneStats | null;
+  /** Whether existing content exists (for showing Re-Generate vs Generate) */
+  hasExistingContent: boolean;
+  /** Fetch scene stats from the server */
+  fetchSceneStats: () => Promise<SceneStats | null>;
   /** Start bulk scene generation */
-  generateAll: (includeVideos?: boolean) => Promise<BulkSceneGenerationResult | null>;
+  generateAll: (includeVideos?: boolean, force?: boolean) => Promise<BulkSceneGenerationResult | null>;
   /** Cancel all queued generation jobs */
   cancelAll: () => Promise<CancelSceneResult | null>;
   /** Retry failed sentences */
@@ -138,6 +152,39 @@ export function useSceneGeneration(
   const [error, setError] = useState<string | null>(null);
   const [totalImages, setTotalImages] = useState(0);
   const [totalVideos, setTotalVideos] = useState(0);
+  const [sceneStats, setSceneStats] = useState<SceneStats | null>(null);
+
+  // Computed value: whether existing content exists
+  const hasExistingContent = useMemo(() => {
+    if (!sceneStats) return false;
+    return sceneStats.withImages > 0 || sceneStats.withVideos > 0;
+  }, [sceneStats]);
+
+  // Fetch scene stats from the server
+  const fetchSceneStats = useCallback(async (): Promise<SceneStats | null> => {
+    if (!projectId) return null;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/projects/${projectId}/scene-stats`);
+      if (!response.ok) return null;
+
+      const result = await response.json();
+      const stats = result.data as SceneStats;
+      setSceneStats(stats);
+      return stats;
+    } catch {
+      return null;
+    }
+  }, [projectId]);
+
+  // Fetch scene stats on mount and when projectId changes
+  useEffect(() => {
+    if (projectId) {
+      fetchSceneStats();
+    } else {
+      setSceneStats(null);
+    }
+  }, [projectId, fetchSceneStats]);
 
   // WebSocket integration for real-time progress
   const { status: wsStatus } = useWebSocket(projectId, {
@@ -283,7 +330,8 @@ export function useSceneGeneration(
   }, [sentenceStates, isGenerating, isLoading, completedCount, failedCount, onAllComplete]);
 
   // Generate all scenes (images and optionally videos)
-  const generateAll = useCallback(async (includeVideos = defaultIncludeVideos): Promise<BulkSceneGenerationResult | null> => {
+  // force: when true, regenerate all scenes regardless of existing files
+  const generateAll = useCallback(async (includeVideos = defaultIncludeVideos, force = false): Promise<BulkSceneGenerationResult | null> => {
     if (!projectId) {
       setError('No project selected');
       return null;
@@ -297,7 +345,7 @@ export function useSceneGeneration(
       const response = await fetch(`${API_BASE}/api/v1/projects/${projectId}/generate-scenes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ includeVideos }),
+        body: JSON.stringify({ includeVideos, force }),
       });
 
       if (!response.ok) {
@@ -479,6 +527,9 @@ export function useSceneGeneration(
     totalImages,
     totalVideos,
     failedSentences,
+    sceneStats,
+    hasExistingContent,
+    fetchSceneStats,
     generateAll,
     cancelAll,
     retryFailed,

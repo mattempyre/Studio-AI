@@ -152,3 +152,31 @@ export function getImagePath(projectId: string, sentenceId: string): string {
 export function getVideoPath(projectId: string, sentenceId: string): string {
   return path.join(getProjectMediaDir(projectId, 'videos'), `${sentenceId}.mp4`);
 }
+
+/**
+ * Convert a filesystem path to a media URL path for serving to the frontend.
+ *
+ * Takes paths like:
+ *   - ./data/projects/proj-123/images/sent-456.png
+ *   - data/projects/proj-123/images/sent-456.png
+ *   - C:\...\data\projects\proj-123\images\sent-456.png
+ *
+ * Returns: /media/projects/proj-123/images/sent-456.png
+ *
+ * This path can be appended to API_BASE on the frontend to get the full URL.
+ */
+export function toMediaUrl(filesystemPath: string): string {
+  // Normalize to forward slashes
+  const normalized = filesystemPath.replace(/\\/g, '/');
+
+  // Find the project directory portion (after 'projects/')
+  const projectsMatch = normalized.match(/projects\/(.+)$/);
+  if (projectsMatch) {
+    return `/media/projects/${projectsMatch[1]}`;
+  }
+
+  // Fallback: if path doesn't match expected pattern, return as-is
+  // This shouldn't happen in normal operation
+  console.warn(`toMediaUrl: unexpected path format: ${filesystemPath}`);
+  return filesystemPath;
+}

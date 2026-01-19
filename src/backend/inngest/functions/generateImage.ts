@@ -1,7 +1,7 @@
 import { inngest } from '../client.js';
 import { createComfyUIClient } from '../../clients/comfyui.js';
 import { jobService } from '../../services/jobService.js';
-import { getImagePath, ensureOutputDir } from '../../services/outputPaths.js';
+import { getImagePath, ensureOutputDir, toMediaUrl } from '../../services/outputPaths.js';
 import { db, sentences, characters, generationModels, visualStyles } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import * as fs from 'fs/promises';
@@ -276,12 +276,14 @@ export const generateImageFunction = inngest.createFunction(
         }
       });
 
-      // Step 7: Finalize
+      // Step 7: Finalize - convert filesystem path to media URL
+      const mediaUrl = toMediaUrl(imageResult);
+
       await step.run('finalize-generation', async () => {
         if (!isTestRun) {
           await db.update(sentences)
             .set({
-              imageFile: imageResult,
+              imageFile: mediaUrl,
               isImageDirty: false,
               status: 'completed',
               updatedAt: new Date(),
@@ -293,13 +295,13 @@ export const generateImageFunction = inngest.createFunction(
           projectId: isTestRun ? 'test-project' : projectId,
           jobType: 'image',
           sentenceId: isTestRun ? undefined : sentenceId,
-          resultFile: imageResult,
+          resultFile: mediaUrl,
         });
       });
 
       return {
         success: true,
-        filePath: imageResult,
+        filePath: mediaUrl,
         isTestRun,
       };
     } catch (error) {

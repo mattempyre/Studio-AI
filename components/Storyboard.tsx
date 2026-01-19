@@ -10,9 +10,15 @@ interface StoryboardProps {
   project: Project;
   onUpdateProject: (project: Project) => void;
   onNext: () => void;
+  /** Called when an image completes generating - for real-time UI updates */
+  onImageComplete?: (sentenceId: string, imageFile: string) => void;
+  /** Called when a video completes generating - for real-time UI updates */
+  onVideoComplete?: (sentenceId: string, videoFile: string) => void;
+  /** Called when all generation completes */
+  onGenerationComplete?: () => void;
 }
 
-const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNext }) => {
+const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNext, onImageComplete, onVideoComplete, onGenerationComplete }) => {
   const [selectedSceneId, setSelectedSceneId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -43,6 +49,19 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
   useEffect(() => {
       projectRef.current = project;
   }, [project]);
+
+  // Refs for scene elements in the main content area (for smooth scrolling)
+  const sceneRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Handle selecting a scene and scrolling to it smoothly
+  const handleSelectScene = (sceneId: string) => {
+    setSelectedSceneId(sceneId);
+    const element = sceneRefs.current.get(sceneId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   // Set initial selected scene if not set
   useEffect(() => {
@@ -124,12 +143,12 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
 
                     <div className="flex flex-col gap-1.5 pl-2 border-l border-white/5 ml-3">
                         {group.scenes.map((scene, idx) => (
-                            <div 
+                            <div
                                 key={scene.id}
-                                onClick={() => setSelectedSceneId(scene.id)}
+                                onClick={() => handleSelectScene(scene.id)}
                                 className={`p-2 rounded-lg flex gap-3 cursor-pointer transition-colors border relative ${
-                                    selectedSceneId === scene.id 
-                                    ? 'bg-primary/10 border-primary/30' 
+                                    selectedSceneId === scene.id
+                                    ? 'bg-primary/10 border-primary/30'
                                     : 'hover:bg-white/5 border-transparent'
                                 }`}
                             >
@@ -167,12 +186,12 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                 <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-white/5">
                      <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider px-2">Unassigned Scenes</h4>
                      {orphanedScenes.map((scene) => (
-                        <div 
+                        <div
                             key={scene.id}
-                            onClick={() => setSelectedSceneId(scene.id)}
+                            onClick={() => handleSelectScene(scene.id)}
                             className={`p-2 rounded-lg flex items-center gap-3 cursor-pointer transition-colors border ${
-                                selectedSceneId === scene.id 
-                                ? 'bg-primary/10 border-primary/30' 
+                                selectedSceneId === scene.id
+                                ? 'bg-primary/10 border-primary/30'
                                 : 'hover:bg-white/5 border-transparent'
                             }`}
                         >
@@ -214,10 +233,9 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
             {/* Bulk Scene Generation Toolbar - STORY-4-4 */}
             <BulkGenerationToolbar
               projectId={project.id}
-              onGenerationComplete={() => {
-                // Trigger project refresh when generation completes
-                // The onUpdateProject will be called by parent when data changes
-              }}
+              onImageComplete={onImageComplete}
+              onVideoComplete={onVideoComplete}
+              onGenerationComplete={onGenerationComplete}
             />
         </div>
 
@@ -234,8 +252,12 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                       /* Table / List View */
                       <div className="flex flex-col gap-4">
                           {group.scenes.map((scene, idx) => (
-                              <div 
-                                  key={scene.id} 
+                              <div
+                                  key={scene.id}
+                                  ref={(el) => {
+                                    if (el) sceneRefs.current.set(scene.id, el);
+                                    else sceneRefs.current.delete(scene.id);
+                                  }}
                                   className={`flex gap-4 group transition-all duration-300 ${
                                       selectedSceneId === scene.id ? 'opacity-100' : 'opacity-80 hover:opacity-100'
                                   }`}
@@ -342,12 +364,16 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                       /* Grid View */
                       <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
                         {group.scenes.map((scene, idx) => (
-                           <div 
+                           <div
                               key={scene.id}
+                              ref={(el) => {
+                                if (el) sceneRefs.current.set(scene.id, el);
+                                else sceneRefs.current.delete(scene.id);
+                              }}
                               onClick={() => setSelectedSceneId(scene.id)}
                               className={`group relative flex flex-col bg-card-bg border rounded-xl overflow-hidden cursor-pointer transition-all ${
-                                selectedSceneId === scene.id 
-                                ? 'border-primary ring-1 ring-primary shadow-lg shadow-primary/20 transform scale-[1.01]' 
+                                selectedSceneId === scene.id
+                                ? 'border-primary ring-1 ring-primary shadow-lg shadow-primary/20 transform scale-[1.01]'
                                 : 'border-border-color hover:border-primary/50 hover:shadow-xl'
                               }`}
                            >

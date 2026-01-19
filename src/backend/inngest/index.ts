@@ -12,6 +12,7 @@ import {
   generateSectionAudioFunction,
   retroactiveAudioAlignmentFunction,
   generateImageFunction,
+  generateImageBatchFunction,
   generateImagePromptsFunction,
 } from './functions/index.js';
 
@@ -26,6 +27,7 @@ export const functions = [
   generateSectionAudioFunction,
   retroactiveAudioAlignmentFunction,
   generateImageFunction,
+  generateImageBatchFunction,
   generateImagePromptsFunction,
   // Future functions:
   // generateVideo,

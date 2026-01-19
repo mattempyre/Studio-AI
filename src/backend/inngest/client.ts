@@ -185,6 +185,37 @@ export type StudioEvents = {
     };
   };
 
+  // Batch image generation (model-aware batching to minimize model reloads)
+  'image/generate-batch': {
+    data: {
+      batchId: string;               // Unique batch identifier
+      projectId: string;
+      modelId: string;               // All sentences in batch use same model
+      styleId: string;               // All sentences in batch use same style
+      sentences: Array<{
+        sentenceId: string;
+        prompt: string;
+        characterRefs?: string[];    // Per-sentence character references
+        useImageToImage?: boolean;
+        seed?: number;
+      }>;
+    };
+  };
+  'image/batch-completed': {
+    data: {
+      batchId: string;
+      projectId: string;
+      completed: number;
+      failed: number;
+      results: Array<{
+        sentenceId: string;
+        status: 'completed' | 'failed';
+        imageFile?: string;
+        error?: string;
+      }>;
+    };
+  };
+
   // Video generation events
   'video/generate': {
     data: {
