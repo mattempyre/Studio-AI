@@ -125,6 +125,7 @@ export function useWebSocket(
   const reconnectAttempts = useRef(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentProjectId = useRef<string | null>(projectId);
+  const isIntentionalDisconnect = useRef(false);
 
   // Refs for callbacks - prevents reconnection when callbacks change
   const onProgressRef = useRef(onProgress);
@@ -196,6 +197,7 @@ export function useWebSocket(
         console.log('[WebSocket] Connected');
         setStatus('connected');
         reconnectAttempts.current = 0;
+        isIntentionalDisconnect.current = false;
 
         // Auto-subscribe if we have a projectId
         if (currentProjectId.current) {
@@ -253,8 +255,11 @@ export function useWebSocket(
       };
 
       ws.onerror = (error) => {
-        console.error('[WebSocket] Error:', error);
-        setStatus('error');
+        // Don't log errors for intentional disconnects
+        if (!isIntentionalDisconnect.current) {
+          console.error('[WebSocket] Error:', error);
+          setStatus('error');
+        }
       };
 
       ws.onclose = (event) => {
@@ -262,6 +267,11 @@ export function useWebSocket(
         setStatus('disconnected');
         setIsSubscribed(false);
         wsRef.current = null;
+
+        // Don't reconnect if this was an intentional disconnect
+        if (isIntentionalDisconnect.current) {
+          return;
+        }
 
         // Attempt reconnection with exponential backoff
         if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
@@ -290,11 +300,21 @@ export function useWebSocket(
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {
     clearReconnectTimeout();
-    reconnectAttempts.current = MAX_RECONNECT_ATTEMPTS; // Prevent reconnection
+    isIntentionalDisconnect.current = true;
 
     if (wsRef.current) {
-      wsRef.current.close(1000, 'Client disconnect');
+      const ws = wsRef.current;
       wsRef.current = null;
+
+      // Only close if connection is open or connecting
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1000, 'Client disconnect');
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        // For CONNECTING state, close will be called but may error - that's ok
+        // The isIntentionalDisconnect flag prevents reconnection attempts
+        ws.close(1000, 'Client disconnect');
+      }
+      // If already CLOSING or CLOSED, do nothing
     }
 
     setStatus('disconnected');
