@@ -382,10 +382,12 @@ projectsRouter.delete('/:id', async (req, res, next) => {
   }
 });
 
-// POST /api/v1/projects/:id/mark-audio-dirty - Mark all sentences as needing audio regeneration
+// POST /api/v1/projects/:id/mark-audio-dirty - Mark sentences as needing audio regeneration
+// Optional body: { sectionId } to mark only a specific section
 projectsRouter.post('/:id/mark-audio-dirty', async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { sectionId } = req.body; // Optional: specific section
 
     // Verify project exists
     const project = await db.select().from(projects).where(eq(projects.id, id)).get();
@@ -396,22 +398,36 @@ projectsRouter.post('/:id/mark-audio-dirty', async (req, res, next) => {
       });
     }
 
-    // Get all section IDs for this project
-    const projectSections = await db.select()
-      .from(sections)
-      .where(eq(sections.projectId, id));
+    let sectionIds: string[];
 
-    if (projectSections.length === 0) {
-      return res.json({
-        success: true,
-        data: { markedCount: 0, message: 'Project has no sections' },
-      });
+    if (sectionId) {
+      // Mark specific section only
+      const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+      if (!section) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Section not found' },
+        });
+      }
+      sectionIds = [sectionId];
+    } else {
+      // Mark all sections in the project
+      const projectSections = await db.select()
+        .from(sections)
+        .where(eq(sections.projectId, id));
+
+      if (projectSections.length === 0) {
+        return res.json({
+          success: true,
+          data: { markedCount: 0, message: 'Project has no sections' },
+        });
+      }
+
+      sectionIds = projectSections.map(s => s.id);
     }
 
-    const sectionIds = projectSections.map(s => s.id);
-
-    // Mark all sentences in these sections as audio dirty
-    const result = await db.update(sentences)
+    // Mark sentences in the target sections as audio dirty
+    await db.update(sentences)
       .set({ isAudioDirty: true })
       .where(inArray(sentences.sectionId, sectionIds));
 
@@ -425,7 +441,10 @@ projectsRouter.post('/:id/mark-audio-dirty', async (req, res, next) => {
       success: true,
       data: {
         markedCount,
-        message: `Marked ${markedCount} sentences for audio regeneration`,
+        sectionId: sectionId || null,
+        message: sectionId
+          ? `Marked ${markedCount} sentences in section for audio regeneration`
+          : `Marked ${markedCount} sentences for audio regeneration`,
       },
     });
   } catch (error) {
@@ -619,6 +638,7 @@ projectsRouter.post('/:id/generate-section-audio', async (req, res, next) => {
         sectionId: section.id,
         jobId: job.id,
         sentenceCount: validSentences.length,
+        sentenceIds: validSentences.map(s => s.id),
       });
     }
 
@@ -695,6 +715,128 @@ projectsRouter.post('/:id/cancel-audio', async (req, res, next) => {
         cancelled: cancelledIds.length,
         jobIds: cancelledIds,
         message: `Cancelled ${cancelledIds.length} queued jobs`,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/projects/:id/retroactive-audio-alignment - Align existing section audio to get word timings
+projectsRouter.post('/:id/retroactive-audio-alignment', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { sectionId } = req.body; // Optional: specific section, or all sections if not provided
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get sections to process
+    let sectionsToProcess;
+    if (sectionId) {
+      // Process specific section
+      const section = await db.select().from(sections).where(eq(sections.id, sectionId)).get();
+      if (!section) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Section not found' },
+        });
+      }
+      sectionsToProcess = [section];
+    } else {
+      // Process all sections in the project
+      sectionsToProcess = await db.select()
+        .from(sections)
+        .where(eq(sections.projectId, id))
+        .orderBy(sections.order);
+    }
+
+    if (sectionsToProcess.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_SECTIONS', message: 'Project has no sections' },
+      });
+    }
+
+    // Queue retroactive alignment jobs for sections with audio but missing wordTimings
+    const queuedSections: { sectionId: string; jobId: string; sentenceCount: number }[] = [];
+
+    for (const section of sectionsToProcess) {
+      // Get sentences for this section that have sectionAudioFile but no wordTimings
+      const sentencesNeedingAlignment = await db.select()
+        .from(sentences)
+        .where(eq(sentences.sectionId, section.id))
+        .orderBy(sentences.order);
+
+      // Filter to sentences that have audio but need word timing alignment
+      const sentencesWithAudioNoTimings = sentencesNeedingAlignment.filter(s =>
+        s.sectionAudioFile && // Has section audio file
+        (!s.wordTimings || (Array.isArray(s.wordTimings) && s.wordTimings.length === 0)) && // No word timings
+        s.text && s.text.trim().length > 0 // Has text to align
+      );
+
+      if (sentencesWithAudioNoTimings.length === 0) {
+        continue; // Skip sections that don't need alignment
+      }
+
+      // Get the audio file path (should be the same for all sentences in the section)
+      const audioFile = sentencesWithAudioNoTimings[0].sectionAudioFile!;
+
+      // Create job record for tracking
+      const job = await jobService.create({
+        projectId: id,
+        jobType: 'audio',
+      });
+
+      // Queue the retroactive alignment event
+      await inngest.send({
+        name: 'audio/retroactive-align',
+        data: {
+          sectionId: section.id,
+          projectId: id,
+          audioFile,
+          sentenceTexts: sentencesNeedingAlignment
+            .filter(s => s.text && s.text.trim().length > 0)
+            .map(s => ({
+              sentenceId: s.id,
+              text: s.text,
+              order: s.order,
+            })),
+        },
+      });
+
+      queuedSections.push({
+        sectionId: section.id,
+        jobId: job.id,
+        sentenceCount: sentencesWithAudioNoTimings.length,
+      });
+    }
+
+    if (queuedSections.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          queued: 0,
+          message: 'No sections need retroactive audio alignment (all sentences already have word timings or no audio)',
+        },
+      });
+    }
+
+    const totalSentences = queuedSections.reduce((sum, s) => sum + s.sentenceCount, 0);
+
+    res.json({
+      success: true,
+      data: {
+        queued: queuedSections.length,
+        totalSentences,
+        sections: queuedSections,
+        message: `Queued ${queuedSections.length} section(s) with ${totalSentences} sentences for retroactive audio alignment`,
       },
     });
   } catch (error) {

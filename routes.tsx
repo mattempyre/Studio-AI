@@ -17,17 +17,20 @@ import CharacterLibrary from './components/CharacterLibrary';
 import { StyleBuilder } from './components/StyleBuilder';
 import { useAppContext, AppProvider } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import { projectsApi } from './services/backendApi';
 import type { BackendProject } from './types';
 
-// Root Layout Component - wraps all routes with ThemeProvider, AppProvider and Layout
+// Root Layout Component - wraps all routes with ThemeProvider, AppProvider, AudioPlayerProvider and Layout
 function RootLayout() {
   return (
     <ThemeProvider>
       <AppProvider>
-        <AuthGuard>
-          <LayoutWrapper />
-        </AuthGuard>
+        <AudioPlayerProvider>
+          <AuthGuard>
+            <LayoutWrapper />
+          </AuthGuard>
+        </AudioPlayerProvider>
       </AppProvider>
     </ThemeProvider>
   );

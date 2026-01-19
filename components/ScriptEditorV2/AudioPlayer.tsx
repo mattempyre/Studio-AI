@@ -20,6 +20,10 @@ interface AudioPlayerProps {
   onTimeUpdate?: (timeMs: number) => void;
   /** Called when play/pause state changes (for karaoke sync) */
   onPlayStateChange?: (isPlaying: boolean) => void;
+  /** Whether to auto-play when audio is ready (default: true for new URLs) */
+  autoPlay?: boolean;
+  /** Called after auto-play is consumed (to clear the flag) */
+  onAutoPlayConsumed?: () => void;
 }
 
 export const AudioPlayer: React.FC<AudioPlayerProps> = ({
@@ -29,6 +33,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   sectionId,
   onTimeUpdate,
   onPlayStateChange,
+  autoPlay = true,
+  onAutoPlayConsumed,
 }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -94,12 +100,18 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
     const handleCanPlay = () => {
       setIsLoading(false);
-      // Auto-play when ready
-      audio.play().then(() => {
-        setIsPlaying(true);
-      }).catch(err => {
-        console.error('Auto-play failed:', err);
-      });
+      // Auto-play when ready (if enabled)
+      if (autoPlay) {
+        audio.play().then(() => {
+          setIsPlaying(true);
+          // Clear the auto-play flag after starting playback
+          onAutoPlayConsumed?.();
+        }).catch(err => {
+          console.error('Auto-play failed:', err);
+          // Still clear the flag even on failure to avoid retry loops
+          onAutoPlayConsumed?.();
+        });
+      }
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -116,7 +128,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       audio.removeEventListener('canplay', handleCanPlay);
       audio.pause();
     };
-  }, [audioUrl]);
+  }, [audioUrl, autoPlay, onAutoPlayConsumed]);
 
   // Update audio volume when volume state changes
   useEffect(() => {

@@ -261,6 +261,7 @@ export const jobService = {
       projectId: string;
       jobType: JobType;
       sentenceId?: string;
+      sectionId?: string;
       resultFile?: string;
       duration?: number;
     }
@@ -281,6 +282,7 @@ export const jobService = {
       jobId,
       jobType: options.jobType,
       sentenceId: options.sentenceId,
+      sectionId: options.sectionId,
       result: {
         file: options.resultFile,
         duration: options.duration,
@@ -316,6 +318,35 @@ export const jobService = {
       jobType: options.jobType,
       sentenceId: options.sentenceId,
       error: errorMessage,
+    });
+  },
+
+  /**
+   * Broadcast a job completion event for a sentence without creating a job record.
+   * Used for broadcasting per-sentence completion events after section audio generation.
+   */
+  broadcastSentenceComplete(options: {
+    projectId: string;
+    jobType: JobType;
+    sentenceId: string;
+    sectionId?: string;
+    file?: string;
+    startMs?: number;
+    endMs?: number;
+    duration?: number;
+  }): void {
+    broadcastJobComplete({
+      projectId: options.projectId,
+      jobId: `section-sentence-${options.sentenceId}`,
+      jobType: options.jobType,
+      sentenceId: options.sentenceId,
+      sectionId: options.sectionId,
+      result: {
+        file: options.file,
+        duration: options.duration,
+        startMs: options.startMs,
+        endMs: options.endMs,
+      },
     });
   },
 };

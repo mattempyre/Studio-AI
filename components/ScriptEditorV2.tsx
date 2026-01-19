@@ -28,7 +28,7 @@ import { Header } from './ScriptEditorV2/Header';
 import { PromptsPanel } from './ScriptEditorV2/PromptsPanel';
 import { Sidebar } from './ScriptEditorV2/Sidebar';
 import { AudioToolbar } from './ScriptEditorV2/AudioToolbar';
-import { AudioPlayer } from './ScriptEditorV2/AudioPlayer';
+import { useAudioPlayer } from '../context/AudioPlayerContext';
 
 interface ScriptEditorV2Props {
   projectId: string;
@@ -104,14 +104,15 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   const [isDraggingVoice, setIsDraggingVoice] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Audio player state for footer playbar
-  const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
-  const [currentAudioLabel, setCurrentAudioLabel] = useState<string | undefined>(undefined);
-
-  // Karaoke sync state for word highlighting during playback
-  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
-  const [audioCurrentTimeMs, setAudioCurrentTimeMs] = useState(0);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  // Global audio player context for persistent playback across navigation
+  const {
+    audioUrl: currentAudioUrl,
+    sectionId: activeSectionId,
+    isPlaying: isAudioPlaying,
+    currentTimeMs: audioCurrentTimeMs,
+    playAudio,
+    closePlayer: handleCloseAudioPlayer,
+  } = useAudioPlayer();
 
   // Character management with useCharacters hook
   const {
@@ -150,6 +151,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     setMode: setAudioMode,
     getSentenceStatus: getAudioSentenceStatus,
     forceRegenerate: forceRegenerateAudio,
+    generateSection: generateSectionAudio,
     error: audioError,
   } = useAudioGeneration(projectId, {
     onSentenceComplete: useCallback((sentenceId: string, audioFile: string, duration?: number) => {
@@ -169,6 +171,39 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
         };
       });
     }, []),
+    onSectionComplete: useCallback(async (sectionId: string) => {
+      // Refetch project to get updated sentence data including wordTimings, sectionAudioFile, etc.
+      // This is needed for karaoke highlighting and proper audio playback in section mode
+      console.log('[ScriptEditor] Section audio completed, refetching project for wordTimings:', sectionId);
+      try {
+        const updatedProject = await projectsApi.get(projectId);
+        // Map cast to characters format (same as loadProject)
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const castData = (updatedProject as any).cast || [];
+        const mappedCharacters = castData.map((c: any) => {
+          const firstImage = c.referenceImages?.[0];
+          return {
+            id: c.id,
+            name: c.name,
+            description: c.description || '',
+            imageUrl: firstImage ? `${API_BASE}${firstImage}` : `https://picsum.photos/seed/${c.id}/200/200`,
+            stylePrompt: c.styleLora || undefined,
+          };
+        });
+        const normalizedProject: BackendProject = {
+          ...updatedProject,
+          sections: (updatedProject.sections || []).map(section => ({
+            ...section,
+            sentences: section.sentences || [],
+          })),
+          characters: mappedCharacters,
+        };
+        setProject(normalizedProject);
+        console.log('[ScriptEditor] Project refetched with wordTimings for section:', sectionId);
+      } catch (err) {
+        console.error('[ScriptEditor] Failed to refetch project after section completion:', err);
+      }
+    }, [projectId]),
     onAllComplete: useCallback(() => {
       setToast({ message: 'All audio generation complete!', type: 'success' });
     }, []),
@@ -182,7 +217,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     }, 0);
   }, [project?.sections]);
 
-  // Handle audio playback - opens the footer AudioPlayer
+  // Handle audio playback - uses global AudioPlayerContext for persistent playback
   // Audio file paths from DB are like "./data/projects/{projectId}/audio/{sentenceId}.wav"
   // or on Windows: "data\projects\{projectId}\audio\{sentenceId}.wav"
   // We need to convert to URL: "{API_BASE}/media/projects/{projectId}/audio/{sentenceId}.wav"
@@ -193,33 +228,22 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
     // Convert file path to URL
     // Path formats: ./data/projects/... or data/projects/...
     // URL format: {API_BASE}/media/projects/{projectId}/audio/{sentenceId}.wav
+    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     let audioUrl = normalizedPath;
 
     // Match various path formats and extract the part after "data/projects/"
     const match = normalizedPath.match(/(?:\.\/)?data\/projects\/(.+)/);
     if (match) {
-      audioUrl = `${API_BASE}/media/projects/${match[1]}`;
+      audioUrl = `${API_BASE_URL}/media/projects/${match[1]}`;
     } else if (normalizedPath.startsWith('/')) {
       // If it's an absolute path starting with /, prepend API_BASE
-      audioUrl = `${API_BASE}${normalizedPath}`;
+      audioUrl = `${API_BASE_URL}${normalizedPath}`;
     }
 
-    console.log('[Audio] Playing:', audioUrl, sectionId ? `(section: ${sectionId})` : '');
-    setCurrentAudioUrl(audioUrl);
-    setCurrentAudioLabel(label);
-    // Track which section is playing for karaoke sync
-    setActiveSectionId(sectionId || null);
-  }, []);
-
-  // Close audio player
-  const handleCloseAudioPlayer = useCallback(() => {
-    setCurrentAudioUrl(null);
-    setCurrentAudioLabel(undefined);
-    // Reset karaoke sync state
-    setActiveSectionId(null);
-    setAudioCurrentTimeMs(0);
-    setIsAudioPlaying(false);
-  }, []);
+    console.log('[Audio] Playing via context:', audioUrl, sectionId ? `(section: ${sectionId})` : '');
+    // Use global audio player context for persistent playback across navigation
+    playAudio(audioUrl, label, sectionId || null);
+  }, [playAudio]);
 
   // Model/Style selection state
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -230,13 +254,16 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
   const [editingCharacter, setEditingCharacter] = useState<BackendCharacter | null>(null);
   const [pendingImages, setPendingImages] = useState<File[]>([]);
 
-  // Cleanup audio on unmount
+  // Cleanup voice preview audio on unmount (not footer player - that's global now)
   useEffect(() => {
     return () => {
+      // Clean up voice preview audio only
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      // Note: We no longer clear the footer audio player state here
+      // Audio playback now persists across navigation via AudioPlayerContext
     };
   }, []);
 
@@ -1180,6 +1207,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
                       onAIExpand={(afterSentenceId) => handleOpenAIExpand(section, afterSentenceId)}
                       getSentenceAudioState={getAudioSentenceStatus}
                       onPlayAudio={handlePlayAudio}
+                      onRegenerateAudio={generateSectionAudio}
                       // Karaoke sync props
                       currentAudioTimeMs={audioCurrentTimeMs}
                       isAudioPlaying={isAudioPlaying}
@@ -1285,15 +1313,7 @@ const ScriptEditorV2: React.FC<ScriptEditorV2Props> = ({
           />
         )}
 
-        {/* Fixed footer audio player */}
-        <AudioPlayer
-          audioUrl={currentAudioUrl}
-          onClose={handleCloseAudioPlayer}
-          trackLabel={currentAudioLabel}
-          sectionId={activeSectionId}
-          onTimeUpdate={setAudioCurrentTimeMs}
-          onPlayStateChange={setIsAudioPlaying}
-        />
+        {/* Audio player is now rendered globally in Layout.tsx for persistent playback */}
       </div>
     </ScriptEditorErrorBoundary>
   );

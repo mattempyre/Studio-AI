@@ -10,6 +10,7 @@ import {
   generateScriptFunction,
   generateAudioFunction,
   generateSectionAudioFunction,
+  retroactiveAudioAlignmentFunction,
   generateImageFunction,
 } from './functions/index.js';
 
@@ -22,6 +23,7 @@ export const functions = [
   generateScriptFunction,
   generateAudioFunction,
   generateSectionAudioFunction,
+  retroactiveAudioAlignmentFunction,
   generateImageFunction,
   // Future functions:
   // generateVideo,

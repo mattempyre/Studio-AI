@@ -56,7 +56,7 @@ describe('useAudioGeneration', () => {
   });
 
   describe('generateAll', () => {
-    it('should queue audio generation jobs', async () => {
+    it('should queue audio generation jobs (per-sentence mode)', async () => {
       const mockResponse = {
         success: true,
         data: {
@@ -76,7 +76,8 @@ describe('useAudioGeneration', () => {
         json: () => Promise.resolve(mockResponse),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      // Explicitly use per-sentence mode (default is now per-section)
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       let response;
       await act(async () => {
@@ -106,7 +107,7 @@ describe('useAudioGeneration', () => {
         }),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       let response;
       await act(async () => {
@@ -131,7 +132,7 @@ describe('useAudioGeneration', () => {
         json: () => Promise.resolve(mockResponse),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       let response;
       await act(async () => {
@@ -160,7 +161,7 @@ describe('useAudioGeneration', () => {
         }),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       await act(async () => {
         await result.current.generateAll();
@@ -202,7 +203,7 @@ describe('useAudioGeneration', () => {
         }),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       let cancelResponse;
       await act(async () => {
@@ -215,7 +216,7 @@ describe('useAudioGeneration', () => {
 
   describe('getSentenceStatus', () => {
     it('should return undefined for unknown sentences', () => {
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       const status = result.current.getSentenceStatus('unknown-id');
       expect(status).toBeUndefined();
@@ -233,7 +234,7 @@ describe('useAudioGeneration', () => {
         }),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       await act(async () => {
         await result.current.generateAll();
@@ -262,7 +263,7 @@ describe('useAudioGeneration', () => {
         }),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       await act(async () => {
         await result.current.generateAll();
@@ -292,7 +293,7 @@ describe('useAudioGeneration', () => {
         }),
       });
 
-      const { result } = renderHook(() => useAudioGeneration('project-123'));
+      const { result } = renderHook(() => useAudioGeneration('project-123', { mode: 'per-sentence' }));
 
       expect(result.current.isGenerating).toBe(false);
 

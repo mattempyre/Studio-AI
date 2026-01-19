@@ -18,6 +18,7 @@ export const SectionCard: React.FC<{
     onAIExpand: (afterSentenceId?: string) => void;
     getSentenceAudioState?: (sentenceId: string) => SentenceAudioState | undefined;
     onPlayAudio?: (audioUrl: string, label?: string, sectionId?: string) => void;
+    onRegenerateAudio?: (sectionId: string) => void;
     // Karaoke sync props
     currentAudioTimeMs?: number;
     isAudioPlaying?: boolean;
@@ -36,6 +37,7 @@ export const SectionCard: React.FC<{
     onAIExpand,
     getSentenceAudioState,
     onPlayAudio,
+    onRegenerateAudio,
     // Karaoke sync
     currentAudioTimeMs = 0,
     isAudioPlaying = false,
@@ -165,6 +167,18 @@ export const SectionCard: React.FC<{
                         <span className="text-[10px] text-text-muted">
                             {sentences.length} sentence{sentences.length !== 1 ? 's' : ''}
                         </span>
+                        {onRegenerateAudio && sentences.length > 0 && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRegenerateAudio(section.id);
+                                }}
+                                className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/10 rounded transition-colors"
+                                title="Regenerate section audio"
+                            >
+                                <Icons.RefreshCw size={14} />
+                            </button>
+                        )}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();

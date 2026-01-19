@@ -6,6 +6,7 @@ export { generateLongScriptFunction, generateOutlineOnlyFunction } from './gener
 export { generateScriptFunction } from './generateScript.js';
 export { generateAudioFunction } from './generateAudio.js';
 export { generateSectionAudioFunction } from './generateSectionAudio.js';
+export { retroactiveAudioAlignmentFunction } from './retroactiveAudioAlignment.js';
 export { generateImageFunction } from './generateImage.js';
 
 // Future functions to be added:

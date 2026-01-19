@@ -35,9 +35,12 @@ export interface JobCompleteEvent {
   jobId: string;
   jobType: JobType;
   sentenceId?: string;
+  sectionId?: string;
   result: {
     file?: string;
     duration?: number;
+    startMs?: number;
+    endMs?: number;
   };
 }
 

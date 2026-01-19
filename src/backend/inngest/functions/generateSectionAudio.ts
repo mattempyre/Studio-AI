@@ -189,14 +189,31 @@ export const generateSectionAudioFunction = inngest.createFunction(
         // Future extension could track section-level audio status here
       });
 
-      // Step 7: Mark job complete
+      // Step 7: Mark job complete and broadcast per-sentence completions
       await step.run('finalize-section', async () => {
+        // Mark the section job complete with sectionId for frontend refetch trigger
         await jobService.markCompletedWithBroadcast(job.id, {
           projectId,
           jobType: 'audio',
+          sectionId,
           resultFile: audioResult.filePath,
           duration: audioResult.durationMs,
         });
+
+        // Broadcast individual sentence completion events for frontend state updates
+        // This allows the UI to update each sentence's audio status in real-time
+        for (const timing of sentenceTimings) {
+          jobService.broadcastSentenceComplete({
+            projectId,
+            jobType: 'audio',
+            sentenceId: timing.sentenceId,
+            sectionId,
+            file: audioResult.filePath,
+            startMs: timing.startMs,
+            endMs: timing.endMs,
+            duration: timing.endMs - timing.startMs,
+          });
+        }
       });
 
       return {

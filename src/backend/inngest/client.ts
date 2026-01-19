@@ -108,6 +108,27 @@ export type StudioEvents = {
     };
   };
 
+  // Retroactive audio alignment (align existing audio to sentences using Whisper)
+  'audio/retroactive-align': {
+    data: {
+      sectionId: string;
+      projectId: string;
+      audioFile: string; // Path to existing section audio file
+      sentenceTexts: Array<{
+        sentenceId: string;
+        text: string;
+        order: number;
+      }>;
+    };
+  };
+  'audio/retroactive-align-completed': {
+    data: {
+      sectionId: string;
+      projectId: string;
+      sentenceCount: number;
+    };
+  };
+
   // Image generation events
   'image/generate': {
     data: {

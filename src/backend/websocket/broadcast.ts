@@ -60,9 +60,12 @@ export interface BroadcastCompleteParams {
   jobId: string;
   jobType: JobType;
   sentenceId?: string;
+  sectionId?: string;
   result?: {
     file?: string;
     duration?: number;
+    startMs?: number;
+    endMs?: number;
   };
 }
 
@@ -77,6 +80,7 @@ export function broadcastJobComplete(params: BroadcastCompleteParams): void {
     jobId: params.jobId,
     jobType: params.jobType,
     ...(params.sentenceId && { sentenceId: params.sentenceId }),
+    ...(params.sectionId && { sectionId: params.sectionId }),
     result: params.result || {},
   };
 

@@ -5,6 +5,8 @@ import * as Icons from './Icons';
 import ThemeSelector from './ThemeSelector';
 import { ViewState, User, Project } from '../types';
 import ProjectDropdown from './Sidebar/ProjectDropdown';
+import { AudioPlayer } from './ScriptEditorV2/AudioPlayer';
+import { useAudioPlayer } from '../context/AudioPlayerContext';
 
 const LAST_PROJECT_KEY = 'studioai_last_project_id';
 
@@ -40,6 +42,20 @@ const Layout: React.FC<LayoutProps> = ({
   const location = useLocation();
   const params = useParams({ strict: false }) as { projectId?: string };
   const navigate = useNavigate();
+
+  // Global audio player context
+  const {
+    audioUrl,
+    trackLabel,
+    sectionId,
+    isPlaying,
+    currentTimeMs,
+    shouldAutoPlay,
+    closePlayer,
+    setCurrentTimeMs,
+    setIsPlaying,
+    clearAutoPlay,
+  } = useAudioPlayer();
 
   // Get activeProjectId from URL params first, then fall back to localStorage
   const getStoredProjectId = (): string => {
@@ -433,6 +449,20 @@ const Layout: React.FC<LayoutProps> = ({
 
         {children}
       </main>
+
+      {/* Global Audio Player - persists across navigation */}
+      {audioUrl && (
+        <AudioPlayer
+          audioUrl={audioUrl}
+          onClose={closePlayer}
+          trackLabel={trackLabel}
+          sectionId={sectionId}
+          onTimeUpdate={setCurrentTimeMs}
+          onPlayStateChange={setIsPlaying}
+          autoPlay={shouldAutoPlay} // Auto-play only for new audio requests, not on navigation
+          onAutoPlayConsumed={clearAutoPlay} // Clear flag after auto-play starts
+        />
+      )}
     </div>
   );
 };
