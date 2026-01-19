@@ -181,14 +181,96 @@ function ScriptEditorPage() {
 
 function StoryboardPage() {
   const { projectId } = storyboardRoute.useParams();
-  const { projects, handleProjectUpdate } = useAppContext();
   const navigate = storyboardRoute.useNavigate();
+  const [backendProject, setBackendProject] = useState<BackendProject | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const project = projects.find((p) => p.id === projectId);
+  // Fetch project data from backend
+  useEffect(() => {
+    const loadProject = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await projectsApi.get(projectId);
+        setBackendProject(data);
+      } catch (err) {
+        console.error('Failed to load project:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load project');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProject();
+  }, [projectId]);
 
-  if (!project) {
-    return <Navigate to="/" />;
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-text-muted">Loading storyboard...</p>
+        </div>
+      </div>
+    );
   }
+
+  if (error || !backendProject) {
+    return (
+      <div className="flex-1 flex items-center justify-center flex-col gap-4">
+        <p className="text-red-400">{error || 'Project not found'}</p>
+        <button
+          onClick={() => navigate({ to: '/' })}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  // Transform backend data to Project format for Storyboard component
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  // Flatten all sentences from all sections into scenes
+  const scenes = backendProject.sections.flatMap((section) =>
+    section.sentences.map((sentence) => ({
+      id: sentence.id,
+      scriptSectionId: sentence.sectionId,
+      timestamp: '',
+      narration: sentence.text,
+      imagePrompt: sentence.imagePrompt || '',
+      videoPrompt: sentence.videoPrompt || undefined,
+      imageUrl: sentence.imageFile ? `${API_BASE}${sentence.imageFile}` : undefined,
+      videoUrl: sentence.videoFile ? `${API_BASE}${sentence.videoFile}` : undefined,
+      cameraMovement: sentence.cameraMovement || 'static',
+      visualStyle: backendProject.visualStyle || 'cinematic',
+    }))
+  );
+
+  // Create a Project-like object for the Storyboard component
+  const project = {
+    id: backendProject.id,
+    name: backendProject.name,
+    type: 'Video' as const,
+    status: backendProject.status as 'draft' | 'rendering' | 'completed',
+    lastEdited: backendProject.updatedAt ? new Date(backendProject.updatedAt).toLocaleDateString() : 'Never',
+    createdAt: backendProject.createdAt ? new Date(backendProject.createdAt).toLocaleDateString() : '',
+    script: backendProject.sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      content: s.sentences.map((sen) => sen.text).join(' '),
+    })),
+    scenes,
+    textOverlays: [],
+    progress: 0,
+    visualStyle: backendProject.visualStyle || 'cinematic',
+  };
+
+  const handleProjectUpdate = (updatedProject: typeof project) => {
+    // TODO: Implement actual backend update for storyboard changes
+    console.log('Storyboard update:', updatedProject);
+  };
 
   return (
     <Storyboard

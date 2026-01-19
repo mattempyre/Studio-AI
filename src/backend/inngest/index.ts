@@ -12,6 +12,7 @@ import {
   generateSectionAudioFunction,
   retroactiveAudioAlignmentFunction,
   generateImageFunction,
+  generateImagePromptsFunction,
 } from './functions/index.js';
 
 // All functions to be registered with Inngest
@@ -25,6 +26,7 @@ export const functions = [
   generateSectionAudioFunction,
   retroactiveAudioAlignmentFunction,
   generateImageFunction,
+  generateImagePromptsFunction,
   // Future functions:
   // generateVideo,
   // exportProject,

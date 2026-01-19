@@ -73,10 +73,12 @@ development_status:
   epic-3-retrospective: optional
 
   # EPIC-04: Image Generation
-  epic-4: backlog
-  4-1-image-prompt-generation: ready-for-dev
-  4-2-image-generation-job: ready-for-dev
-  4-3-image-regeneration-override: ready-for-dev
+  epic-4: in-progress
+  4-1-image-prompt-generation: dev-complete
+  4-2-image-generation-job: dev-complete
+  4-3-prompt-display-storyboard: ready-for-dev
+  4-4-bulk-scene-generation: ready-for-dev
+  4-5-image-regeneration-override: ready-for-dev
   epic-4-retrospective: optional
 
   # EPIC-05: Video Generation
@@ -92,7 +94,6 @@ development_status:
   6-2-storyboard-grid-view: ready-for-dev
   6-3-scene-inspector-panel: ready-for-dev
   6-4-section-navigation-sidebar: ready-for-dev
-  6-5-bulk-scene-generation: ready-for-dev
   epic-6-retrospective: optional
 
   # EPIC-07: Export System

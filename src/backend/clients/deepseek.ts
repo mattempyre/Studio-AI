@@ -110,6 +110,33 @@ export interface SectionExpansionResult {
   sentences: ExpandedSentence[];
 }
 
+// Image prompt generation types
+export interface ImagePromptSentence {
+  id: string;
+  index: number;
+  text: string;
+  sectionTitle: string;
+}
+
+export interface ImagePromptGenerationOptions {
+  sentences: ImagePromptSentence[];
+  styleContext?: {
+    name: string;
+    promptPrefix: string | null;
+  };
+  castCharacters?: Array<{
+    name: string;
+    description: string | null;
+  }>;
+}
+
+export interface GeneratedImagePromptResult {
+  prompts: Array<{
+    index: number;
+    imagePrompt: string;
+  }>;
+}
+
 interface DeepseekMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -893,6 +920,173 @@ Generate ${sentenceCount} sentence(s) that naturally continue or expand on the s
 
     // Parse the response
     return this.parseExpansionResponse(response);
+  }
+
+  /**
+   * Generate image prompts for a batch of sentences using LLM.
+   * Prompts are 50-150 words describing composition, lighting, mood, and subjects.
+   */
+  async generateImagePrompts(options: ImagePromptGenerationOptions): Promise<GeneratedImagePromptResult> {
+    const { sentences, styleContext, castCharacters } = options;
+
+    if (sentences.length === 0) {
+      return { prompts: [] };
+    }
+
+    const systemPrompt = this.buildImagePromptSystemPrompt(styleContext, castCharacters);
+    const userPrompt = this.buildImagePromptUserPrompt(sentences);
+
+    const response = await this.chat([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ]);
+
+    return this.parseImagePromptResponse(response, sentences.length);
+  }
+
+  /**
+   * Build system prompt for image prompt generation.
+   */
+  private buildImagePromptSystemPrompt(
+    styleContext?: { name: string; promptPrefix: string | null },
+    castCharacters?: Array<{ name: string; description: string | null }>
+  ): string {
+    let systemPrompt = `You are a professional visual director creating image prompts for video production.
+Your task is to generate detailed image prompts that will be used to create visuals for a narrated video.
+
+OUTPUT REQUIREMENTS:
+- Each prompt must be 50-150 words
+- Include: composition, lighting, mood, and subject details
+- Describe the scene as if you're directing a cinematographer
+- Focus on visual elements that match the narration text
+- Use specific, concrete descriptions (not vague or abstract)
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+  "prompts": [
+    {
+      "index": 0,
+      "imagePrompt": "A detailed description of the visual scene..."
+    }
+  ]
+}
+
+IMPORTANT GUIDELINES:
+- Match the tone and content of the narration text
+- Create visually interesting compositions
+- Consider the flow between consecutive scenes
+- Use cinematic language (wide shot, close-up, silhouette, etc.)`;
+
+    // Add style context if available
+    if (styleContext?.promptPrefix) {
+      systemPrompt += `
+
+VISUAL STYLE CONTEXT:
+Apply the following visual style to ALL prompts: ${styleContext.promptPrefix}
+Style name: ${styleContext.name}
+Ensure every image prompt incorporates this aesthetic consistently.`;
+    }
+
+    // Add character descriptions if cast exists
+    if (castCharacters && castCharacters.length > 0) {
+      systemPrompt += `
+
+CHARACTER REFERENCE GUIDE:
+When any of these characters appear in the narration, include their visual description in the prompt:`;
+
+      for (const char of castCharacters) {
+        systemPrompt += `
+- ${char.name}: ${char.description || 'No detailed description provided'}`;
+      }
+
+      systemPrompt += `
+
+IMPORTANT: When a character is mentioned in the text, describe their appearance using the provided details.
+Include relevant character descriptions naturally within the scene description.`;
+    }
+
+    systemPrompt += `
+
+Output ONLY valid JSON. No markdown code blocks, no explanation.`;
+
+    return systemPrompt;
+  }
+
+  /**
+   * Build user prompt for image prompt generation batch.
+   */
+  private buildImagePromptUserPrompt(sentences: ImagePromptSentence[]): string {
+    let userPrompt = `Generate image prompts for the following ${sentences.length} narration sentences.
+Each prompt should visualize the scene described in the narration.
+
+SENTENCES TO PROCESS:`;
+
+    for (const sentence of sentences) {
+      userPrompt += `
+
+[${sentence.index}] Section: "${sentence.sectionTitle}"
+Narration: "${sentence.text}"`;
+    }
+
+    userPrompt += `
+
+Generate a detailed image prompt for each sentence above. Return JSON with the "prompts" array containing objects with "index" (matching the number in brackets) and "imagePrompt" fields.`;
+
+    return userPrompt;
+  }
+
+  /**
+   * Parse image prompt generation response.
+   */
+  private parseImagePromptResponse(content: string, expectedCount: number): GeneratedImagePromptResult {
+    let jsonContent = content.trim();
+
+    // Handle markdown code blocks
+    const jsonMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+
+    // Try to find JSON object in the content
+    const objectMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (objectMatch) {
+      jsonContent = objectMatch[0];
+    }
+
+    try {
+      const parsed = JSON.parse(jsonContent);
+
+      if (!parsed.prompts || !Array.isArray(parsed.prompts)) {
+        throw new DeepseekError(
+          'Invalid response structure: missing prompts array',
+          'PARSE_ERROR',
+          { parsed }
+        );
+      }
+
+      // Validate and normalize prompts
+      const prompts = parsed.prompts.map((p: Record<string, unknown>) => ({
+        index: Number(p.index),
+        imagePrompt: String(p.imagePrompt || ''),
+      }));
+
+      // Log warning if we got fewer prompts than expected
+      if (prompts.length < expectedCount) {
+        console.warn(`Image prompt generation: expected ${expectedCount} prompts, got ${prompts.length}`);
+      }
+
+      return { prompts };
+    } catch (error) {
+      if (error instanceof DeepseekError) {
+        throw error;
+      }
+
+      throw new DeepseekError(
+        `Failed to parse image prompt response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'PARSE_ERROR',
+        { content: content.substring(0, 500) }
+      );
+    }
   }
 
   /**

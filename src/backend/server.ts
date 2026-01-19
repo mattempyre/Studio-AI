@@ -13,6 +13,7 @@ import { sentencesRouter } from './api/sentences.js';
 import { imagesRouter } from './api/images.js';
 import { modelsRouter } from './api/models.js';
 import { stylesRouter } from './api/styles.js';
+import { promptsRouter } from './api/prompts.js';
 import { inngestHandler } from './api/inngest.js';
 import { inngest } from './inngest/index.js';
 import { setupWebSocket, closeWebSocket, getTotalClients } from './websocket/index.js';
@@ -67,6 +68,8 @@ app.use('/api/v1/sections', sectionsRouter);
 app.use('/api/v1/sentences', sentencesRouter);
 // Scripts routes are nested under projects for context
 app.use('/api/v1/projects', scriptsRouter);
+// Image prompts routes are nested under projects
+app.use('/api/v1/projects', promptsRouter);
 // Images routes - for image generation with ComfyUI
 app.use('/api/v1', imagesRouter);
 // Generation models and visual styles - for Style Builder

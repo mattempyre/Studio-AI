@@ -370,6 +370,16 @@ export const generateLongScriptFunction = inngest.createFunction(
       };
     });
 
+    // Trigger image prompt generation for sentences missing prompts
+    // Uses the project's styleId and cast for better context (STORY 4.1)
+    await step.sendEvent('trigger-image-prompts', {
+      name: 'prompts/generate-image',
+      data: {
+        projectId,
+        force: false, // Only generate for sentences without prompts
+      },
+    });
+
     console.log(`[LongScript] Completed generation: ${result.totalSections} sections, ${result.totalSentences} sentences`);
 
     return {

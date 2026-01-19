@@ -31,47 +31,9 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
     }
   }, [project.scenes, selectedSceneId]);
 
-  // Auto-generate images for scenes that don't have one
-  useEffect(() => {
-      const scenesToGenerate = project.scenes.filter(s => !s.imageUrl && !generatingImages.has(s.id));
-      
-      if (scenesToGenerate.length > 0) {
-          // Mark these IDs as generating immediately to prevent double-trigger
-          setGeneratingImages(prev => {
-              const next = new Set(prev);
-              scenesToGenerate.forEach(s => next.add(s.id));
-              return next;
-          });
-
-          const generate = async () => {
-              const currentProject = projectRef.current;
-              const idsToUpdate = scenesToGenerate.map(s => s.id);
-              
-              // Process one by one to avoid rate limits in this demo, or all parallel
-              for (const scene of scenesToGenerate) {
-                   try {
-                       const imageUrl = await generateImage(scene.imagePrompt || scene.narration);
-                       
-                       // Update state progressively
-                       onUpdateProject({
-                           ...projectRef.current, // Use latest ref
-                           scenes: projectRef.current.scenes.map(s => s.id === scene.id ? { ...s, imageUrl } : s)
-                       });
-                   } catch (e) {
-                       console.error(`Failed to generate image for scene ${scene.id}`, e);
-                   } finally {
-                       setGeneratingImages(prev => {
-                           const next = new Set(prev);
-                           next.delete(scene.id);
-                           return next;
-                       });
-                   }
-              }
-          };
-
-          generate();
-      }
-  }, [project.scenes, generatingImages, onUpdateProject]);
+  // NOTE: Auto-generation disabled - image generation now happens via backend Inngest/ComfyUI pipeline
+  // The Storyboard UI will be updated in Epic 6 to integrate with backend image generation
+  // For now, images should be generated via the API and will display when imageUrl is set
 
   const activeScene = project.scenes.find(s => s.id === selectedSceneId) || project.scenes[0];
 

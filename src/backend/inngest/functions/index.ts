@@ -8,6 +8,7 @@ export { generateAudioFunction } from './generateAudio.js';
 export { generateSectionAudioFunction } from './generateSectionAudio.js';
 export { retroactiveAudioAlignmentFunction } from './retroactiveAudioAlignment.js';
 export { generateImageFunction } from './generateImage.js';
+export { generateImagePromptsFunction } from './generatePrompts.js';
 
 // Future functions to be added:
 // export { generateVideo } from './video.js';

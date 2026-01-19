@@ -1447,3 +1447,230 @@ describe('Long-Form Script Generation', () => {
     });
   });
 });
+
+// =============================================================================
+// STORY 4.1: Image Prompt Generation Tests
+// =============================================================================
+
+describe('Image Prompt Generation', () => {
+  let client: DeepseekClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetDeepseekClient();
+    process.env = { ...process.env, DEEPSEEK_API_KEY: 'test-api-key' };
+    client = new DeepseekClient({
+      apiKey: 'test-api-key',
+      maxRetries: 2,
+      retryDelay: 10,
+    });
+  });
+
+  describe('generateImagePrompts', () => {
+    const validPromptsResponse = {
+      prompts: [
+        {
+          index: 0,
+          imagePrompt: 'A wide shot of a futuristic cityscape at sunset, with golden light reflecting off towering glass buildings. The composition uses leading lines from a bridge in the foreground, creating depth and drawing the eye to the skyline. Mood is hopeful and awe-inspiring.',
+        },
+        {
+          index: 1,
+          imagePrompt: 'Close-up portrait of a scientist in a modern laboratory, warm lighting from monitors illuminating their face. The subject appears contemplative, surrounded by holographic displays showing data visualizations. Clean, minimalist composition.',
+        },
+      ],
+    };
+
+    const testSentences = [
+      {
+        id: 'sent-1',
+        index: 0,
+        text: 'In the near future, our cities will transform beyond recognition.',
+        sectionTitle: 'Introduction',
+      },
+      {
+        id: 'sent-2',
+        index: 1,
+        text: 'Scientists are working tirelessly to make these visions a reality.',
+        sectionTitle: 'The Research',
+      },
+    ];
+
+    it('should generate image prompts for a batch of sentences', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: JSON.stringify(validPromptsResponse),
+              },
+            },
+          ],
+        }),
+      });
+
+      const result = await client.generateImagePrompts({
+        sentences: testSentences,
+      });
+
+      expect(result.prompts).toHaveLength(2);
+      expect(result.prompts[0].index).toBe(0);
+      expect(result.prompts[0].imagePrompt.length).toBeGreaterThan(50);
+      expect(result.prompts[1].index).toBe(1);
+    });
+
+    it('should include style context in system prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validPromptsResponse) } }],
+        }),
+      });
+
+      await client.generateImagePrompts({
+        sentences: testSentences,
+        styleContext: {
+          name: 'Cyberpunk Neon',
+          promptPrefix: 'Cyberpunk aesthetic, neon lights, rain-slicked streets, high contrast',
+        },
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const systemPrompt = callBody.messages[0].content;
+
+      expect(systemPrompt).toContain('Cyberpunk aesthetic');
+      expect(systemPrompt).toContain('neon lights');
+      expect(systemPrompt).toContain('Cyberpunk Neon');
+    });
+
+    it('should include cast character descriptions in system prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validPromptsResponse) } }],
+        }),
+      });
+
+      await client.generateImagePrompts({
+        sentences: testSentences,
+        castCharacters: [
+          { name: 'Dr. Sarah Chen', description: 'A brilliant scientist with silver hair and kind eyes, wearing a white lab coat' },
+          { name: 'Alex', description: 'Young tech entrepreneur, dark skin, shaved head, casual but stylish attire' },
+        ],
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const systemPrompt = callBody.messages[0].content;
+
+      expect(systemPrompt).toContain('Dr. Sarah Chen');
+      expect(systemPrompt).toContain('silver hair');
+      expect(systemPrompt).toContain('Alex');
+      expect(systemPrompt).toContain('shaved head');
+    });
+
+    it('should return empty array for empty sentences input', async () => {
+      const result = await client.generateImagePrompts({
+        sentences: [],
+      });
+
+      expect(result.prompts).toHaveLength(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should parse prompts from markdown code block', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '```json\n' + JSON.stringify(validPromptsResponse) + '\n```',
+              },
+            },
+          ],
+        }),
+      });
+
+      const result = await client.generateImagePrompts({
+        sentences: testSentences,
+      });
+
+      expect(result.prompts).toHaveLength(2);
+    });
+
+    it('should throw PARSE_ERROR on invalid JSON response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'This is not valid JSON at all' } }],
+        }),
+      });
+
+      await expect(
+        client.generateImagePrompts({ sentences: testSentences })
+      ).rejects.toMatchObject({
+        code: 'PARSE_ERROR',
+      });
+    });
+
+    it('should throw PARSE_ERROR when prompts array is missing', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ notPrompts: [] }) } }],
+        }),
+      });
+
+      await expect(
+        client.generateImagePrompts({ sentences: testSentences })
+      ).rejects.toMatchObject({
+        code: 'PARSE_ERROR',
+      });
+    });
+
+    it('should warn when fewer prompts returned than expected', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  prompts: [{ index: 0, imagePrompt: 'Only one prompt returned' }],
+                }),
+              },
+            },
+          ],
+        }),
+      });
+
+      await client.generateImagePrompts({ sentences: testSentences });
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('expected 2 prompts, got 1')
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should include section title context in user prompt', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify(validPromptsResponse) } }],
+        }),
+      });
+
+      await client.generateImagePrompts({ sentences: testSentences });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const userPrompt = callBody.messages[1].content;
+
+      expect(userPrompt).toContain('Introduction');
+      expect(userPrompt).toContain('The Research');
+    });
+  });
+});

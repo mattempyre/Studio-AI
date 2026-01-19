@@ -1,4 +1,4 @@
-# Story 4.3: Image Regeneration & Override
+# Story 4.5: Image Regeneration & Override
 
 Status: ready-for-dev
 

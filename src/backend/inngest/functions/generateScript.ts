@@ -216,6 +216,16 @@ export const generateScriptFunction = inngest.createFunction(
       });
     });
 
+    // Step 8: Trigger image prompt generation for sentences missing prompts
+    // Uses the project's styleId and cast for better context (STORY 4.1)
+    await step.sendEvent('trigger-image-prompts', {
+      name: 'prompts/generate-image',
+      data: {
+        projectId,
+        force: false, // Only generate for sentences without prompts
+      },
+    });
+
     console.log(`[Script] Completed generation: ${savedData.sectionCount} sections, ${savedData.sentenceCount} sentences`);
 
     return {

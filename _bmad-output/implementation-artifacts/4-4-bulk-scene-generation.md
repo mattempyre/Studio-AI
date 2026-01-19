@@ -1,4 +1,4 @@
-# Story 6.5: Bulk Scene Generation
+# Story 4.4: Bulk Scene Generation
 
 Status: ready-for-dev
 
