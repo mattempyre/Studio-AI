@@ -17,6 +17,25 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const [generatingImages, setGeneratingImages] = useState<Set<string>>(new Set());
   const [generatingVideos, setGeneratingVideos] = useState<Set<string>>(new Set());
+  // Track expanded prompts by scene ID (format: "sceneId-image" or "sceneId-video")
+  const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
+
+  const togglePromptExpanded = (sceneId: string, type: 'image' | 'video') => {
+    const key = `${sceneId}-${type}`;
+    setExpandedPrompts(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const isPromptExpanded = (sceneId: string, type: 'image' | 'video') => {
+    return expandedPrompts.has(`${sceneId}-${type}`);
+  };
 
   // Use a ref to access the latest project state inside async functions without stale closures
   const projectRef = useRef(project);
@@ -229,11 +248,64 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                           <label className="text-[10px] text-text-muted font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
                                               <Icons.Mic size={10} /> Narration
                                           </label>
-                                          <textarea 
-                                              readOnly 
+                                          <textarea
+                                              readOnly
                                               className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-sm leading-relaxed resize-none text-white/90"
                                               value={scene.narration}
                                           />
+
+                                          {/* Prompt Display Section */}
+                                          <div className="bg-[#1e1933]/50 rounded-md p-3 mt-3 space-y-2">
+                                              {/* Image Prompt */}
+                                              <div className="flex items-start gap-2">
+                                                  <Icons.ImageIcon size={12} className="text-text-muted mt-0.5 shrink-0" />
+                                                  <div className="flex-1 min-w-0">
+                                                      <span className="text-text-muted text-[10px] uppercase tracking-wide mr-2">Image:</span>
+                                                      {scene.imagePrompt ? (
+                                                          <span
+                                                              onClick={(e) => { e.stopPropagation(); togglePromptExpanded(scene.id, 'image'); }}
+                                                              className={`text-white/70 text-xs font-mono cursor-pointer hover:text-white/90 transition-colors ${
+                                                                  isPromptExpanded(scene.id, 'image') ? '' : 'line-clamp-2'
+                                                              }`}
+                                                              title={isPromptExpanded(scene.id, 'image') ? 'Click to collapse' : 'Click to expand'}
+                                                          >
+                                                              {scene.imagePrompt}
+                                                          </span>
+                                                      ) : (
+                                                          <span className="text-text-muted italic text-xs">No prompt generated</span>
+                                                      )}
+                                                  </div>
+                                              </div>
+
+                                              {/* Video Prompt */}
+                                              <div className="flex items-start gap-2">
+                                                  <Icons.Video size={12} className="text-text-muted mt-0.5 shrink-0" />
+                                                  <div className="flex-1 min-w-0">
+                                                      <span className="text-text-muted text-[10px] uppercase tracking-wide mr-2">Video:</span>
+                                                      {scene.videoPrompt ? (
+                                                          <span
+                                                              onClick={(e) => { e.stopPropagation(); togglePromptExpanded(scene.id, 'video'); }}
+                                                              className={`text-white/70 text-xs font-mono cursor-pointer hover:text-white/90 transition-colors ${
+                                                                  isPromptExpanded(scene.id, 'video') ? '' : 'line-clamp-2'
+                                                              }`}
+                                                              title={isPromptExpanded(scene.id, 'video') ? 'Click to collapse' : 'Click to expand'}
+                                                          >
+                                                              {scene.videoPrompt}
+                                                          </span>
+                                                      ) : (
+                                                          <span className="text-text-muted italic text-xs">No prompt generated</span>
+                                                      )}
+                                                  </div>
+                                              </div>
+
+                                              {/* Camera Movement Badge */}
+                                              <div className="flex items-center gap-2 pt-1">
+                                                  <Icons.Camera size={10} className="text-text-muted" />
+                                                  <span className="bg-[#1e1933] border border-white/10 px-2 py-0.5 rounded text-[10px] text-text-muted">
+                                                      {scene.cameraMovement || 'static'}
+                                                  </span>
+                                              </div>
+                                          </div>
                                       </div>
                                       <div className="w-80 aspect-video border-l border-white/5 bg-black group/image shrink-0 relative flex items-center justify-center overflow-hidden">
                                           {scene.videoUrl ? (
@@ -312,11 +384,49 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                   <p className="text-[12px] text-white/90 line-clamp-3 leading-relaxed font-medium">
                                       {scene.narration}
                                   </p>
-                                  
+
+                                  {/* Prompt Display Section */}
+                                  <div className="bg-[#1e1933]/50 rounded-md p-2 space-y-1.5">
+                                      {/* Image Prompt */}
+                                      <div className="flex items-start gap-1.5">
+                                          <Icons.ImageIcon size={10} className="text-text-muted mt-0.5 shrink-0" />
+                                          {scene.imagePrompt ? (
+                                              <p
+                                                  onClick={(e) => { e.stopPropagation(); togglePromptExpanded(scene.id, 'image'); }}
+                                                  className={`text-[11px] text-white/60 font-mono cursor-pointer hover:text-white/80 transition-colors ${
+                                                      isPromptExpanded(scene.id, 'image') ? '' : 'line-clamp-2'
+                                                  }`}
+                                                  title={isPromptExpanded(scene.id, 'image') ? 'Click to collapse' : 'Click to expand'}
+                                              >
+                                                  {scene.imagePrompt}
+                                              </p>
+                                          ) : (
+                                              <p className="text-[11px] italic text-text-muted">No prompt generated</p>
+                                          )}
+                                      </div>
+                                      {/* Video Prompt */}
+                                      <div className="flex items-start gap-1.5">
+                                          <Icons.Video size={10} className="text-text-muted mt-0.5 shrink-0" />
+                                          {scene.videoPrompt ? (
+                                              <p
+                                                  onClick={(e) => { e.stopPropagation(); togglePromptExpanded(scene.id, 'video'); }}
+                                                  className={`text-[11px] text-white/60 font-mono cursor-pointer hover:text-white/80 transition-colors ${
+                                                      isPromptExpanded(scene.id, 'video') ? '' : 'line-clamp-2'
+                                                  }`}
+                                                  title={isPromptExpanded(scene.id, 'video') ? 'Click to collapse' : 'Click to expand'}
+                                              >
+                                                  {scene.videoPrompt}
+                                              </p>
+                                          ) : (
+                                              <p className="text-[11px] italic text-text-muted">No prompt generated</p>
+                                          )}
+                                      </div>
+                                  </div>
+
                                   <div className="mt-auto pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-text-muted">
                                      <div className="flex items-center gap-1.5">
-                                        <Icons.Video size={10} />
-                                        <span>{scene.cameraMovement}</span>
+                                        <Icons.Camera size={10} />
+                                        <span>{scene.cameraMovement || 'static'}</span>
                                      </div>
                                      <div className="flex items-center gap-1.5">
                                         <Icons.Film size={10} />

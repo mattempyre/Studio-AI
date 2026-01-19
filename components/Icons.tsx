@@ -59,7 +59,8 @@ import {
   Palette,
   Upload,
   FileJson,
-  Loader2
+  Loader2,
+  Camera
 } from 'lucide-react';
 
 export {
@@ -122,5 +123,6 @@ export {
   Palette,
   Upload,
   FileJson,
-  Loader2
+  Loader2,
+  Camera
 };

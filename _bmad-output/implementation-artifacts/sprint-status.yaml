@@ -76,7 +76,7 @@ development_status:
   epic-4: in-progress
   4-1-image-prompt-generation: dev-complete
   4-2-image-generation-job: dev-complete
-  4-3-prompt-display-storyboard: ready-for-dev
+  4-3-prompt-display-storyboard: done
   4-4-bulk-scene-generation: ready-for-dev
   4-5-image-regeneration-override: ready-for-dev
   epic-4-retrospective: optional
