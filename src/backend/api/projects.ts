@@ -912,12 +912,13 @@ projectsRouter.get('/:id/scene-stats', async (req, res, next) => {
   }
 });
 
-// POST /api/v1/projects/:id/generate-scenes - Queue bulk scene generation (images, then videos)
+// POST /api/v1/projects/:id/generate-scenes - Queue bulk image generation
 // STORY-4-4: Bulk Scene Generation
+// Note: Videos are generated separately via /generate-videos after image review
 projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { includeVideos = true, force = false } = req.body; // force: regenerate all regardless of existing files
+    const { includeVideos = false, force = false } = req.body; // includeVideos: false by default (use /generate-videos instead)
 
     // Verify project exists
     const project = await db.select().from(projects).where(eq(projects.id, id)).get();
@@ -1086,6 +1087,133 @@ projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
         imageJobs,  // Per-sentence tracking (for UI progress)
         videoJobs,
         message: `Queued ${batchJobs.length} image batch(es) with ${imageJobs.length} total images and ${videoJobs.length} video jobs`,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/projects/:id/generate-videos - Queue bulk video generation for sentences with images
+// STORY-5-1: Video Generation Job
+// Requires: sentences must have imageFile and videoPrompt
+projectsRouter.post('/:id/generate-videos', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { sentenceIds, force = false } = req.body; // sentenceIds: optional array to limit scope
+
+    // Verify project exists
+    const project = await db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Project not found' },
+      });
+    }
+
+    // Get all sections for this project
+    const projectSections = await db.select()
+      .from(sections)
+      .where(eq(sections.projectId, id))
+      .orderBy(sections.order);
+
+    if (projectSections.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_SECTIONS', message: 'Project has no sections' },
+      });
+    }
+
+    const sectionIds = projectSections.map(s => s.id);
+
+    // Get all sentences
+    let allSentences = await db.select()
+      .from(sentences)
+      .where(inArray(sentences.sectionId, sectionIds))
+      .orderBy(sentences.order);
+
+    // Filter to specific sentences if provided
+    if (sentenceIds && Array.isArray(sentenceIds) && sentenceIds.length > 0) {
+      allSentences = allSentences.filter(s => sentenceIds.includes(s.id));
+    }
+
+    // If force=true, mark matching sentences as video dirty
+    if (force) {
+      const sentenceIdsToMarkDirty = allSentences
+        .filter(s => s.imageFile && s.videoPrompt && s.videoPrompt.trim().length > 0)
+        .map(s => s.id);
+
+      if (sentenceIdsToMarkDirty.length > 0) {
+        await db.update(sentences)
+          .set({ isVideoDirty: true })
+          .where(inArray(sentences.id, sentenceIdsToMarkDirty));
+
+        // Re-fetch sentences to get updated dirty flags
+        allSentences = await db.select()
+          .from(sentences)
+          .where(inArray(sentences.sectionId, sectionIds))
+          .orderBy(sentences.order);
+
+        if (sentenceIds && Array.isArray(sentenceIds) && sentenceIds.length > 0) {
+          allSentences = allSentences.filter(s => sentenceIds.includes(s.id));
+        }
+      }
+    }
+
+    // Sentences eligible for video generation:
+    // - Must have imageFile (source for i2v)
+    // - Must have videoPrompt
+    // - Either no videoFile or isVideoDirty=true
+    const sentencesNeedingVideos = allSentences.filter(s =>
+      s.imageFile &&
+      s.videoPrompt && s.videoPrompt.trim().length > 0 &&
+      (!s.videoFile || s.isVideoDirty)
+    );
+
+    if (sentencesNeedingVideos.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          queued: 0,
+          message: 'No sentences need video generation (check that images and video prompts exist)',
+        },
+      });
+    }
+
+    // Queue video generation jobs
+    const videoJobs: { sentenceId: string; jobId: string }[] = [];
+
+    for (const sentence of sentencesNeedingVideos) {
+      // Create job record for tracking
+      const job = await jobService.create({
+        sentenceId: sentence.id,
+        projectId: id,
+        jobType: 'video',
+      });
+
+      // Queue the Inngest event
+      await inngest.send({
+        name: 'video/generate',
+        data: {
+          sentenceId: sentence.id,
+          projectId: id,
+          imageFile: sentence.imageFile!,
+          prompt: sentence.videoPrompt!,
+          cameraMovement: sentence.cameraMovement || 'static',
+          motionStrength: sentence.motionStrength || 0.5,
+        },
+      });
+
+      videoJobs.push({ sentenceId: sentence.id, jobId: job.id });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        queued: videoJobs.length,
+        totalEligible: sentencesNeedingVideos.length,
+        videoJobs,
+        message: `Queued ${videoJobs.length} video generation jobs`,
       },
     });
   } catch (error) {
