@@ -62,6 +62,9 @@ export interface SceneStats {
   withVideos: number;
   needingImages: number;
   needingVideos: number;
+  // STORY-5-4: Video-specific stats
+  videoEligibleCount: number;  // Sentences with imageFile + videoPrompt
+  existingVideoCount: number;  // Sentences with videoFile
 }
 
 export interface FailedSentence {
@@ -81,6 +84,14 @@ export interface UseSceneGenerationOptions {
   onJobFailed?: (sentenceId: string, jobType: 'image' | 'video', error: string) => void;
   /** Called when all generation completes */
   onAllComplete?: () => void;
+}
+
+// STORY-5-4: Bulk video generation result type
+export interface BulkVideoGenerationResult {
+  queued: number;
+  totalSentences: number;
+  videoJobs: Array<{ sentenceId: string; jobId: string }>;
+  message: string;
 }
 
 export interface UseSceneGenerationReturn {
@@ -112,10 +123,16 @@ export interface UseSceneGenerationReturn {
   sceneStats: SceneStats | null;
   /** Whether existing content exists (for showing Re-Generate vs Generate) */
   hasExistingContent: boolean;
+  /** STORY-5-4: Whether existing videos exist (for showing Re-Generate Videos vs Generate Videos) */
+  hasExistingVideos: boolean;
+  /** STORY-5-4: Whether videos can be generated (has eligible sentences) */
+  canGenerateVideos: boolean;
   /** Fetch scene stats from the server */
   fetchSceneStats: () => Promise<SceneStats | null>;
   /** Start bulk scene generation */
   generateAll: (includeVideos?: boolean, force?: boolean) => Promise<BulkSceneGenerationResult | null>;
+  /** STORY-5-4: Start bulk video generation only */
+  generateAllVideos: (force?: boolean) => Promise<BulkVideoGenerationResult | null>;
   /** Cancel all queued generation jobs */
   cancelAll: () => Promise<CancelSceneResult | null>;
   /** Retry failed sentences */
@@ -158,6 +175,20 @@ export function useSceneGeneration(
   const hasExistingContent = useMemo(() => {
     if (!sceneStats) return false;
     return sceneStats.withImages > 0 || sceneStats.withVideos > 0;
+  }, [sceneStats]);
+
+  // STORY-5-4: Whether existing videos exist
+  const hasExistingVideos = useMemo(() => {
+    if (!sceneStats) return false;
+    return (sceneStats.existingVideoCount ?? sceneStats.withVideos) > 0;
+  }, [sceneStats]);
+
+  // STORY-5-4: Whether videos can be generated (has eligible sentences: imageFile + videoPrompt)
+  const canGenerateVideos = useMemo(() => {
+    if (!sceneStats) return false;
+    // videoEligibleCount is sentences with both imageFile AND videoPrompt
+    // Fall back to checking if there are any images (more permissive)
+    return (sceneStats.videoEligibleCount ?? 0) > 0 || sceneStats.withImages > 0;
   }, [sceneStats]);
 
   // Fetch scene stats from the server
@@ -402,6 +433,63 @@ export function useSceneGeneration(
     }
   }, [projectId, defaultIncludeVideos]);
 
+  // STORY-5-4: Generate all videos only (AC: 33-37)
+  const generateAllVideos = useCallback(async (force = false): Promise<BulkVideoGenerationResult | null> => {
+    if (!projectId) {
+      setError('No project selected');
+      return null;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setSentenceStates(new Map()); // Clear previous states
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/projects/${projectId}/generate-videos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: { message: 'Request failed' } }));
+        throw new Error(errorData.error?.message || 'Failed to start video generation');
+      }
+
+      const result = await response.json();
+      const data = result.data as BulkVideoGenerationResult;
+
+      // Initialize sentence states for all queued video jobs
+      setSentenceStates(prev => {
+        const updated = new Map(prev);
+
+        for (const job of data.videoJobs || []) {
+          updated.set(job.sentenceId, {
+            sentenceId: job.sentenceId,
+            jobId: job.jobId,
+            status: 'queued',
+            progress: 0,
+            jobType: 'video',
+          });
+        }
+
+        return updated;
+      });
+
+      // Track totals
+      setTotalImages(0);
+      setTotalVideos(data.videoJobs?.length || 0);
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [projectId]);
+
   // Cancel all queued jobs
   const cancelAll = useCallback(async (): Promise<CancelSceneResult | null> => {
     if (!projectId) {
@@ -529,8 +617,11 @@ export function useSceneGeneration(
     failedSentences,
     sceneStats,
     hasExistingContent,
+    hasExistingVideos,
+    canGenerateVideos,
     fetchSceneStats,
     generateAll,
+    generateAllVideos,
     cancelAll,
     retryFailed,
     getSentenceStatus,

@@ -21,10 +21,29 @@ vi.mock('../../hooks/useWebSocket', () => ({
 import { useSceneGeneration } from '../../hooks/useSceneGeneration';
 import { useWebSocket } from '../../hooks/useWebSocket';
 
+// Mock scene stats response used by most tests
+const mockSceneStatsResponse = {
+  success: true,
+  data: {
+    totalSentences: 0,
+    withImages: 0,
+    withVideos: 0,
+    needingImages: 0,
+    needingVideos: 0,
+    videoEligibleCount: 0,
+    existingVideoCount: 0,
+  },
+};
+
 describe('useSceneGeneration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockReset();
+    // The hook calls fetchSceneStats on mount, so we need to mock it first
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockSceneStatsResponse),
+    });
   });
 
   describe('initial state', () => {
@@ -355,6 +374,192 @@ describe('useSceneGeneration', () => {
       expect(result.current.error).toBeNull();
       expect(result.current.totalImages).toBe(0);
       expect(result.current.totalVideos).toBe(0);
+    });
+  });
+
+  // STORY-5-4: Video generation tests
+  describe('generateAllVideos', () => {
+    it('should call generate-videos API and initialize video states (AC: 33-35)', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          queued: 3,
+          totalSentences: 5,
+          videoJobs: [
+            { sentenceId: 'sent-1', jobId: 'job-v1' },
+            { sentenceId: 'sent-2', jobId: 'job-v2' },
+            { sentenceId: 'sent-3', jobId: 'job-v3' },
+          ],
+          message: 'Queued 3 video generation jobs',
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const { result } = renderHook(() => useSceneGeneration('project-1'));
+
+      let response: any;
+      await act(async () => {
+        response = await result.current.generateAllVideos();
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/projects/project-1/generate-videos'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      expect(response).toEqual(mockResponse.data);
+      expect(result.current.sentenceStates.size).toBe(3);
+      expect(result.current.sentenceStates.get('sent-1')?.status).toBe('queued');
+      expect(result.current.sentenceStates.get('sent-1')?.jobType).toBe('video');
+      expect(result.current.totalVideos).toBe(3);
+    });
+
+    it('should track only video jobs (AC: 36)', async () => {
+      const mockResponse = {
+        success: true,
+        data: {
+          queued: 2,
+          totalSentences: 5,
+          videoJobs: [
+            { sentenceId: 'sent-1', jobId: 'job-v1' },
+            { sentenceId: 'sent-2', jobId: 'job-v2' },
+          ],
+          message: 'Queued 2 video generation jobs',
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const { result } = renderHook(() => useSceneGeneration('project-1'));
+
+      await act(async () => {
+        await result.current.generateAllVideos();
+      });
+
+      expect(result.current.totalImages).toBe(0);
+      expect(result.current.totalVideos).toBe(2);
+    });
+
+    it('should return null when projectId is null', async () => {
+      const { result } = renderHook(() => useSceneGeneration(null));
+
+      let response: any;
+      await act(async () => {
+        response = await result.current.generateAllVideos();
+      });
+
+      expect(response).toBeNull();
+      expect(result.current.error).toBe('No project selected');
+    });
+  });
+
+  describe('video-specific computed values', () => {
+    it('should compute hasExistingVideos correctly (AC: 38)', async () => {
+      // Clear the default mock from beforeEach
+      mockFetch.mockReset();
+
+      // Mock scene stats with existing videos - this will be the initial fetch
+      const mockSceneStats = {
+        success: true,
+        data: {
+          totalSentences: 10,
+          withImages: 8,
+          withVideos: 3,
+          needingImages: 2,
+          needingVideos: 5,
+          videoEligibleCount: 8,
+          existingVideoCount: 3,
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSceneStats),
+      });
+
+      const { result } = renderHook(() => useSceneGeneration('project-1'));
+
+      // Wait for fetchSceneStats to complete
+      await waitFor(() => {
+        expect(result.current.sceneStats).not.toBeNull();
+        expect(result.current.sceneStats?.existingVideoCount).toBe(3);
+      });
+
+      expect(result.current.hasExistingVideos).toBe(true);
+    });
+
+    it('should compute canGenerateVideos correctly (AC: 31)', async () => {
+      // Clear the default mock from beforeEach
+      mockFetch.mockReset();
+
+      // Mock scene stats with eligible sentences
+      const mockSceneStats = {
+        success: true,
+        data: {
+          totalSentences: 10,
+          withImages: 8,
+          withVideos: 0,
+          needingImages: 2,
+          needingVideos: 5,
+          videoEligibleCount: 5,
+          existingVideoCount: 0,
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSceneStats),
+      });
+
+      const { result } = renderHook(() => useSceneGeneration('project-1'));
+
+      await waitFor(() => {
+        expect(result.current.sceneStats).not.toBeNull();
+        expect(result.current.sceneStats?.videoEligibleCount).toBe(5);
+      });
+
+      expect(result.current.canGenerateVideos).toBe(true);
+    });
+
+    it('should return false for canGenerateVideos when no eligible sentences', async () => {
+      // Clear the default mock from beforeEach
+      mockFetch.mockReset();
+
+      const mockSceneStats = {
+        success: true,
+        data: {
+          totalSentences: 10,
+          withImages: 0,
+          withVideos: 0,
+          needingImages: 10,
+          needingVideos: 0,
+          videoEligibleCount: 0,
+          existingVideoCount: 0,
+        },
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockSceneStats),
+      });
+
+      const { result } = renderHook(() => useSceneGeneration('project-1'));
+
+      await waitFor(() => {
+        expect(result.current.sceneStats).not.toBeNull();
+      });
+
+      expect(result.current.canGenerateVideos).toBe(false);
     });
   });
 });

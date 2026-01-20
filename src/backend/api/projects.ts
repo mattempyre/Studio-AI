@@ -873,6 +873,9 @@ projectsRouter.get('/:id/scene-stats', async (req, res, next) => {
           withVideos: 0,
           needingImages: 0,
           needingVideos: 0,
+          // STORY-5-4: Video-specific stats
+          videoEligibleCount: 0,
+          existingVideoCount: 0,
         },
       });
     }
@@ -897,6 +900,14 @@ projectsRouter.get('/:id/scene-stats', async (req, res, next) => {
       (!s.videoFile || s.isVideoDirty)
     ).length;
 
+    // STORY-5-4: Video-specific stats
+    // videoEligibleCount: sentences with imageFile + videoPrompt (AC: 37)
+    const videoEligibleCount = allSentences.filter(s =>
+      s.imageFile && s.videoPrompt && s.videoPrompt.trim().length > 0
+    ).length;
+    // existingVideoCount: sentences that have videoFile (any video, even dirty)
+    const existingVideoCount = allSentences.filter(s => s.videoFile).length;
+
     res.json({
       success: true,
       data: {
@@ -905,6 +916,9 @@ projectsRouter.get('/:id/scene-stats', async (req, res, next) => {
         withVideos,
         needingImages,
         needingVideos,
+        // STORY-5-4: Video-specific stats
+        videoEligibleCount,
+        existingVideoCount,
       },
     });
   } catch (error) {

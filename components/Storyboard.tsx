@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as Icons from './Icons';
 import { Project, Scene } from '../types';
-import { generateVideo } from '../services/geminiService';
 import { Button } from './ui/button';
 import { BulkGenerationToolbar } from './Storyboard/BulkGenerationToolbar';
 import { ImageEditModal } from './Storyboard/ImageEditModal';
+import { MediaToggle, type MediaView } from './Storyboard/MediaToggle';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const JOB_POLL_INTERVAL = 2000; // 2 seconds
@@ -34,6 +34,14 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   // Track jobIds for regenerating images (sceneId -> jobId)
   const [regeneratingJobs, setRegeneratingJobs] = useState<Map<string, string>>(new Map());
+  // STORY-5-4: Track jobIds for regenerating videos (sceneId -> jobId)
+  const [regeneratingVideoJobs, setRegeneratingVideoJobs] = useState<Map<string, string>>(new Map());
+  // STORY-5-4: Per-scene media tab state (sceneId -> 'image' | 'video')
+  const [activeMediaTabs, setActiveMediaTabs] = useState<Map<string, MediaView>>(new Map());
+  // STORY-5-4: Global media view override (null = no override)
+  const [globalMediaView, setGlobalMediaView] = useState<MediaView | null>(null);
+  // STORY-5-4: Set of scene IDs that have been manually toggled (ignore global override)
+  const [perCardOverrides, setPerCardOverrides] = useState<Set<string>>(new Set());
 
   const togglePromptExpanded = (sceneId: string, type: 'image' | 'video') => {
     const key = `${sceneId}-${type}`;
@@ -52,6 +60,70 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
     return expandedPrompts.has(`${sceneId}-${type}`);
   };
 
+  // STORY-5-4: Get effective media view for a scene
+  // Returns: 'video' if video exists (default), else 'image'
+  // Respects: global override, then per-card state, then per-card manual override
+  const getEffectiveMediaView = useCallback((scene: Scene): MediaView => {
+    const hasImage = !!scene.imageUrl;
+    const hasVideo = !!scene.videoUrl;
+    const isVideoGenerating = generatingVideos.has(scene.id);
+
+    // Check for per-card manual override (ignores global)
+    if (perCardOverrides.has(scene.id)) {
+      const perCardView = activeMediaTabs.get(scene.id);
+      if (perCardView) {
+        // Validate the view is available
+        if (perCardView === 'video' && (hasVideo || isVideoGenerating)) return 'video';
+        if (perCardView === 'image' && hasImage) return 'image';
+      }
+    }
+
+    // Check global override
+    if (globalMediaView !== null) {
+      // Global view overrides, but fallback if content not available
+      if (globalMediaView === 'video') {
+        return (hasVideo || isVideoGenerating) ? 'video' : 'image';
+      }
+      return hasImage ? 'image' : 'video';
+    }
+
+    // Check per-card state (no override set)
+    const perCardView = activeMediaTabs.get(scene.id);
+    if (perCardView) {
+      // Validate the view is available
+      if (perCardView === 'video' && (hasVideo || isVideoGenerating)) return 'video';
+      if (perCardView === 'image' && hasImage) return 'image';
+    }
+
+    // Default: show video if exists, otherwise image (AC: 9)
+    if (hasVideo) return 'video';
+    return 'image';
+  }, [activeMediaTabs, globalMediaView, perCardOverrides, generatingVideos]);
+
+  // STORY-5-4: Handle per-card media tab change
+  const handleMediaTabChange = useCallback((sceneId: string, view: MediaView) => {
+    // Set per-card state
+    setActiveMediaTabs(prev => new Map(prev).set(sceneId, view));
+
+    // If global override is set, add to per-card overrides (AC: 18)
+    if (globalMediaView !== null) {
+      setPerCardOverrides(prev => new Set(prev).add(sceneId));
+    }
+  }, [globalMediaView]);
+
+  // STORY-5-4: Handle global media toggle
+  const handleGlobalMediaToggle = useCallback((view: MediaView | null) => {
+    setGlobalMediaView(view);
+    // Clear per-card overrides when changing global toggle
+    if (view !== null) {
+      setPerCardOverrides(new Set());
+    }
+  }, []);
+
+  // STORY-5-4: Debounced auto-save for video prompt (AC: 19-21)
+  const debouncedVideoPromptSave = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [savingVideoPrompt, setSavingVideoPrompt] = useState(false);
+
   // Use a ref to access the latest project state inside async functions without stale closures
   const projectRef = useRef(project);
   useEffect(() => {
@@ -61,6 +133,58 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
   // Refs for scene elements in the main content area (for smooth scrolling)
   const sceneRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Define activeScene and updateScene early so they can be used in callbacks below
+  const activeScene = project.scenes.find(s => s.id === selectedSceneId) || project.scenes[0];
+
+  const updateScene = useCallback((field: keyof Scene, value: any) => {
+      const updatedScenes = project.scenes.map(s =>
+          s.id === selectedSceneId ? { ...s, [field]: value } : s
+      );
+      onUpdateProject({ ...project, scenes: updatedScenes });
+  }, [project, selectedSceneId, onUpdateProject]);
+
+  // STORY-5-4: Debounced auto-save for video prompt (AC: 19-21)
+  const handleVideoPromptChange = useCallback((value: string) => {
+    if (!activeScene) return;
+
+    // Update local state immediately for responsive UI
+    updateScene('videoPrompt', value);
+
+    // Clear any pending save
+    if (debouncedVideoPromptSave.current) {
+      clearTimeout(debouncedVideoPromptSave.current);
+    }
+
+    // Debounce the API call (500ms delay)
+    debouncedVideoPromptSave.current = setTimeout(async () => {
+      try {
+        setSavingVideoPrompt(true);
+        const response = await fetch(`${API_BASE}/api/v1/sentences/${activeScene.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoPrompt: value }),
+        });
+
+        if (!response.ok) {
+          console.error('Failed to save video prompt');
+        }
+      } catch (err) {
+        console.error('Error saving video prompt:', err);
+      } finally {
+        setSavingVideoPrompt(false);
+      }
+    }, 500);
+  }, [activeScene, updateScene]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debouncedVideoPromptSave.current) {
+        clearTimeout(debouncedVideoPromptSave.current);
+      }
+    };
+  }, []);
 
   // Handle selecting a scene and scrolling to it smoothly
   const handleSelectScene = (sceneId: string) => {
@@ -112,6 +236,39 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
     console.error(`Image generation failed for ${sceneId}:`, error);
   }, []);
 
+  // STORY-5-4: Helper to handle video generation completion
+  const handleVideoCompleteInternal = useCallback((sceneId: string, videoFile: string) => {
+    // Clear generating state
+    setGeneratingVideos(prev => {
+      const next = new Set(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    // Clear job tracking
+    setRegeneratingVideoJobs(prev => {
+      const next = new Map(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    // Call parent's onVideoComplete which updates backendProject state in routes.tsx
+    onVideoComplete?.(sceneId, videoFile);
+  }, [onVideoComplete]);
+
+  // STORY-5-4: Helper to handle video generation failure
+  const handleVideoFailed = useCallback((sceneId: string, error: string) => {
+    setGeneratingVideos(prev => {
+      const next = new Set(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    setRegeneratingVideoJobs(prev => {
+      const next = new Map(prev);
+      next.delete(sceneId);
+      return next;
+    });
+    console.error(`Video generation failed for ${sceneId}:`, error);
+  }, []);
+
   // Poll for job completion (single image regeneration)
   useEffect(() => {
     if (regeneratingJobs.size === 0) return;
@@ -142,14 +299,35 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
     return () => clearInterval(intervalId);
   }, [regeneratingJobs, handleImageCompleteInternal, handleImageFailed]);
 
-  const activeScene = project.scenes.find(s => s.id === selectedSceneId) || project.scenes[0];
+  // STORY-5-4: Poll for video job completion
+  useEffect(() => {
+    if (regeneratingVideoJobs.size === 0) return;
 
-  const updateScene = (field: keyof Scene, value: any) => {
-      const updatedScenes = project.scenes.map(s => 
-          s.id === selectedSceneId ? { ...s, [field]: value } : s
-      );
-      onUpdateProject({ ...project, scenes: updatedScenes });
-  };
+    const pollVideoJobStatus = async () => {
+      for (const [sceneId, jobId] of regeneratingVideoJobs) {
+        try {
+          const response = await fetch(`${API_BASE}/api/v1/jobs/${jobId}`);
+          if (!response.ok) continue;
+
+          const data = await response.json();
+          const job = data.data;
+
+          if (job.status === 'completed' && job.resultFile) {
+            handleVideoCompleteInternal(sceneId, job.resultFile);
+          } else if (job.status === 'failed') {
+            handleVideoFailed(sceneId, job.errorMessage || 'Video generation failed');
+          }
+        } catch (err) {
+          console.error('Failed to poll video job status:', err);
+        }
+      }
+    };
+
+    // Poll immediately, then at intervals
+    pollVideoJobStatus();
+    const intervalId = setInterval(pollVideoJobStatus, JOB_POLL_INTERVAL);
+    return () => clearInterval(intervalId);
+  }, [regeneratingVideoJobs, handleVideoCompleteInternal, handleVideoFailed]);
 
   // Regenerate image for the active scene using backend ComfyUI API
   const handleRegenerateImage = async () => {
@@ -194,21 +372,52 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
       }
   };
 
+  // STORY-5-4: Generate video using backend API (AC: 22-29)
   const handleGenerateVideo = async () => {
       if (!activeScene || generatingVideos.has(activeScene.id)) return;
-      
-      setGeneratingVideos(prev => new Set(prev).add(activeScene.id));
+
+      // AC: 23 - Button disabled if selected sentence has no imageFile
+      if (!activeScene.imageUrl) {
+          alert('Please generate an image first before generating video.');
+          return;
+      }
+
+      const sceneId = activeScene.id;
+      setGeneratingVideos(prev => new Set(prev).add(sceneId));
+
       try {
-          const prompt = activeScene.videoPrompt || activeScene.imagePrompt || activeScene.narration;
-          const videoUrl = await generateVideo(prompt);
-          updateScene('videoUrl', videoUrl);
+          const response = await fetch(`${API_BASE}/api/v1/sentences/${sceneId}/generate-video`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  prompt: activeScene.videoPrompt || activeScene.imagePrompt || activeScene.narration,
+                  cameraMovement: activeScene.cameraMovement,
+                  motionStrength: activeScene.motionStrength,
+              }),
+          });
+
+          if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ error: { message: 'Request failed' } }));
+              throw new Error(errorData.error?.message || 'Failed to start video generation');
+          }
+
+          // Get jobId from response for polling fallback
+          const result = await response.json();
+          const jobId = result.data?.jobId;
+          if (jobId) {
+              setRegeneratingVideoJobs(prev => new Map(prev).set(sceneId, jobId));
+          }
+
+          // Job is queued - WebSocket or polling will handle completion
+          // Auto-switch to video tab to show generating state
+          handleMediaTabChange(sceneId, 'video');
       } catch (e) {
           console.error("Video generation failed", e);
-          alert("Failed to generate video. Please ensure you have a valid API Key selected.");
-      } finally {
+          alert(`Failed to generate video: ${e instanceof Error ? e.message : 'Unknown error'}`);
+          // Only clear generating state on error - success is handled by WebSocket/polling
           setGeneratingVideos(prev => {
               const next = new Set(prev);
-              next.delete(activeScene.id);
+              next.delete(sceneId);
               return next;
           });
       }
@@ -334,6 +543,24 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                   <Icons.Grid size={12}/> GRID
                 </button>
             </div>
+
+            {/* STORY-5-4: Global Media Toggle (AC: 12-18) */}
+            <div className="flex items-center bg-[#1e1933] rounded-lg p-1 border border-white/5">
+                <button
+                  onClick={() => handleGlobalMediaToggle(globalMediaView === 'image' ? null : 'image')}
+                  className={`px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${globalMediaView === 'image' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-text-muted hover:bg-white/5 hover:text-white'}`}
+                  title="Show all images (override per-card tabs)"
+                >
+                  <Icons.ImageIcon size={12}/> IMAGES
+                </button>
+                <button
+                  onClick={() => handleGlobalMediaToggle(globalMediaView === 'video' ? null : 'video')}
+                  className={`px-3 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${globalMediaView === 'video' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-text-muted hover:bg-white/5 hover:text-white'}`}
+                  title="Show all videos (override per-card tabs)"
+                >
+                  <Icons.Video size={12}/> VIDEOS
+                </button>
+            </div>
             </div>
 
             {/* Bulk Scene Generation Toolbar - STORY-4-4 */}
@@ -445,22 +672,63 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                               </div>
                                           </div>
                                       </div>
-                                      <div className="w-80 aspect-video border-l border-white/5 bg-black group/image shrink-0 relative flex items-center justify-center overflow-hidden">
-                                          {scene.videoUrl ? (
-                                              <video src={scene.videoUrl} className="w-full h-full object-cover" controls={false} muted loop autoPlay />
-                                          ) : scene.imageUrl ? (
-                                              <>
-                                                  <div className="absolute inset-0 bg-cover bg-center rounded-none" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
-                                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity flex items-end p-3">
-                                                      <p className="text-[10px] text-white/90 line-clamp-2">{scene.imagePrompt}</p>
-                                                  </div>
-                                              </>
-                                          ) : (
-                                              <div className="flex flex-col items-center gap-2 text-text-muted">
-                                                  <Icons.RefreshCw className="animate-spin" size={24} />
-                                                  <span className="text-[10px] font-bold uppercase tracking-wider">Generating Scene...</span>
-                                              </div>
-                                          )}
+                                      {/* STORY-5-4: Media area with toggle */}
+                                      <div className="w-80 border-l border-white/5 bg-black shrink-0 flex flex-col">
+                                          <div className="aspect-video group/image relative flex items-center justify-center overflow-hidden">
+                                              {(() => {
+                                                  const effectiveView = getEffectiveMediaView(scene);
+                                                  const showVideo = effectiveView === 'video' && scene.videoUrl;
+                                                  const showImage = effectiveView === 'image' && scene.imageUrl;
+                                                  const isVideoGen = generatingVideos.has(scene.id);
+
+                                                  if (showVideo) {
+                                                      return (
+                                                          <video src={scene.videoUrl} className="w-full h-full object-cover" controls={false} muted loop autoPlay />
+                                                      );
+                                                  } else if (showImage) {
+                                                      return (
+                                                          <>
+                                                              <div className="absolute inset-0 bg-cover bg-center rounded-none" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
+                                                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity flex items-end p-3">
+                                                                  <p className="text-[10px] text-white/90 line-clamp-2">{scene.imagePrompt}</p>
+                                                              </div>
+                                                          </>
+                                                      );
+                                                  } else if (isVideoGen && effectiveView === 'video') {
+                                                      return (
+                                                          <div className="flex flex-col items-center gap-2 text-text-muted">
+                                                              <Icons.RefreshCw className="animate-spin" size={24} />
+                                                              <span className="text-[10px] font-bold uppercase tracking-wider">Generating Video...</span>
+                                                          </div>
+                                                      );
+                                                  } else if (generatingImages.has(scene.id)) {
+                                                      return (
+                                                          <div className="flex flex-col items-center gap-2 text-text-muted">
+                                                              <Icons.RefreshCw className="animate-spin" size={24} />
+                                                              <span className="text-[10px] font-bold uppercase tracking-wider">Generating Image...</span>
+                                                          </div>
+                                                      );
+                                                  } else {
+                                                      return (
+                                                          <div className="flex flex-col items-center gap-2 text-text-muted">
+                                                              <Icons.ImageIcon size={24} />
+                                                              <span className="text-[10px] font-bold uppercase tracking-wider">No Media</span>
+                                                          </div>
+                                                      );
+                                                  }
+                                              })()}
+                                          </div>
+                                          {/* Media Toggle Tabs (AC: 1-11) */}
+                                          <div className="px-2 pb-2 flex justify-center">
+                                              <MediaToggle
+                                                  activeView={getEffectiveMediaView(scene)}
+                                                  hasImage={!!scene.imageUrl}
+                                                  hasVideo={!!scene.videoUrl}
+                                                  isVideoGenerating={generatingVideos.has(scene.id)}
+                                                  onViewChange={(view) => handleMediaTabChange(scene.id, view)}
+                                                  size="sm"
+                                              />
+                                          </div>
                                       </div>
                                   </div>
                               </div>
@@ -483,37 +751,77 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                 : 'border-border-color hover:border-primary/50 hover:shadow-xl'
                               }`}
                            >
-                              {/* Image/Video Area */}
-                              <div className="aspect-video bg-black relative flex items-center justify-center overflow-hidden">
-                                  {scene.videoUrl ? (
-                                     <video src={scene.videoUrl} className="w-full h-full object-cover" muted loop autoPlay />
-                                  ) : scene.imageUrl ? (
-                                      <>
-                                          <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
-                                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
-                                      </>
-                                  ) : (
-                                      <div className="flex flex-col items-center gap-2 text-text-muted z-10">
-                                          <Icons.RefreshCw className="animate-spin" size={24} />
-                                          <span className="text-[10px] font-bold uppercase tracking-wider">Generating...</span>
-                                      </div>
-                                  )}
-                                  
-                                  {/* Badge */}
-                                  <div className={`absolute top-2 left-2 size-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 ${
-                                      selectedSceneId === scene.id ? 'bg-primary text-white' : 'bg-black/60 text-white backdrop-blur-md'
-                                  }`}>
-                                      {idx + 1}
-                                  </div>
+                              {/* STORY-5-4: Image/Video Area with Toggle */}
+                              <div className="bg-black flex flex-col">
+                                  <div className="aspect-video relative flex items-center justify-center overflow-hidden">
+                                      {(() => {
+                                          const effectiveView = getEffectiveMediaView(scene);
+                                          const showVideo = effectiveView === 'video' && scene.videoUrl;
+                                          const showImage = effectiveView === 'image' && scene.imageUrl;
+                                          const isVideoGen = generatingVideos.has(scene.id);
 
-                                  {/* Overlay Controls */}
-                                  {scene.imageUrl && (
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 backdrop-blur-[1px]">
-                                        <button className="bg-black/50 hover:bg-primary text-white rounded-full p-2 transition-colors transform translate-y-2 group-hover:translate-y-0">
-                                            <Icons.Maximize2 size={16} />
-                                        </button>
-                                    </div>
-                                  )}
+                                          if (showVideo) {
+                                              return (
+                                                  <video src={scene.videoUrl} className="w-full h-full object-cover" muted loop autoPlay />
+                                              );
+                                          } else if (showImage) {
+                                              return (
+                                                  <>
+                                                      <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: `url(${scene.imageUrl})` }}></div>
+                                                      <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
+                                                  </>
+                                              );
+                                          } else if (isVideoGen && effectiveView === 'video') {
+                                              return (
+                                                  <div className="flex flex-col items-center gap-2 text-text-muted z-10">
+                                                      <Icons.RefreshCw className="animate-spin" size={24} />
+                                                      <span className="text-[10px] font-bold uppercase tracking-wider">Generating Video...</span>
+                                                  </div>
+                                              );
+                                          } else if (generatingImages.has(scene.id)) {
+                                              return (
+                                                  <div className="flex flex-col items-center gap-2 text-text-muted z-10">
+                                                      <Icons.RefreshCw className="animate-spin" size={24} />
+                                                      <span className="text-[10px] font-bold uppercase tracking-wider">Generating...</span>
+                                                  </div>
+                                              );
+                                          } else {
+                                              return (
+                                                  <div className="flex flex-col items-center gap-2 text-text-muted z-10">
+                                                      <Icons.ImageIcon size={24} />
+                                                      <span className="text-[10px] font-bold uppercase tracking-wider">No Media</span>
+                                                  </div>
+                                              );
+                                          }
+                                      })()}
+
+                                      {/* Badge */}
+                                      <div className={`absolute top-2 left-2 size-6 rounded-full flex items-center justify-center text-[10px] font-bold z-10 ${
+                                          selectedSceneId === scene.id ? 'bg-primary text-white' : 'bg-black/60 text-white backdrop-blur-md'
+                                      }`}>
+                                          {idx + 1}
+                                      </div>
+
+                                      {/* Overlay Controls */}
+                                      {(scene.imageUrl || scene.videoUrl) && (
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 backdrop-blur-[1px]">
+                                            <button className="bg-black/50 hover:bg-primary text-white rounded-full p-2 transition-colors transform translate-y-2 group-hover:translate-y-0">
+                                                <Icons.Maximize2 size={16} />
+                                            </button>
+                                        </div>
+                                      )}
+                                  </div>
+                                  {/* Media Toggle Tabs (AC: 1-11) */}
+                                  <div className="px-2 pb-1 flex justify-center">
+                                      <MediaToggle
+                                          activeView={getEffectiveMediaView(scene)}
+                                          hasImage={!!scene.imageUrl}
+                                          hasVideo={!!scene.videoUrl}
+                                          isVideoGenerating={generatingVideos.has(scene.id)}
+                                          onViewChange={(view) => handleMediaTabChange(scene.id, view)}
+                                          size="sm"
+                                      />
+                                  </div>
                               </div>
 
                               {/* Content */}
@@ -665,13 +973,26 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                             <div>
                                 <div className="flex items-center justify-between mb-3">
                                     <h4 className="text-[10px] text-text-muted font-bold uppercase tracking-wider">Video Prompt</h4>
-                                    <span className="text-[9px] text-text-muted flex items-center gap-1"><Icons.Wand2 size={10}/> AI Generated</span>
+                                    {/* STORY-5-4: Auto-save indicator (AC: 20) */}
+                                    <span className="text-[9px] text-text-muted flex items-center gap-1">
+                                        {savingVideoPrompt ? (
+                                            <>
+                                                <Icons.RefreshCw size={10} className="animate-spin" />
+                                                Saving...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Icons.RefreshCw size={10} />
+                                                Auto-save
+                                            </>
+                                        )}
+                                    </span>
                                 </div>
                                 <div className="relative">
-                                    <textarea 
+                                    <textarea
                                         className="w-full bg-[#1e1933] border border-white/10 rounded-lg p-3 text-xs text-white/90 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 leading-relaxed min-h-[100px]"
                                         value={activeScene.videoPrompt || ''}
-                                        onChange={(e) => updateScene('videoPrompt', e.target.value)}
+                                        onChange={(e) => handleVideoPromptChange(e.target.value)}
                                         placeholder="Describe the video motion and details..."
                                     />
                                     <button className="absolute bottom-2 right-2 text-text-muted hover:text-white"><Icons.Wand2 size={14}/></button>
@@ -703,10 +1024,12 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
                                 <input type="range" className="w-full h-1.5 bg-white/10 rounded-full appearance-none accent-primary cursor-pointer" />
                             </div>
                             
+                            {/* STORY-5-4: Generate Video button (AC: 22-29) */}
                             <Button
                                 className="w-full"
                                 onClick={handleGenerateVideo}
-                                disabled={generatingVideos.has(activeScene.id)}
+                                disabled={generatingVideos.has(activeScene.id) || !activeScene.imageUrl}
+                                title={!activeScene.imageUrl ? 'Generate an image first' : undefined}
                             >
                                 {generatingVideos.has(activeScene.id) ? <Icons.RefreshCw className="animate-spin" size={16}/> : <Icons.Video size={16} />}
                                 {generatingVideos.has(activeScene.id) ? 'GENERATING VIDEO...' : 'GENERATE VIDEO'}

@@ -434,6 +434,132 @@ imagesRouter.get('/jobs/:jobId', async (req: Request, res: Response, next) => {
   }
 });
 
+// Validation schema for generate-video endpoint
+const generateVideoSchema = z.object({
+  prompt: z.string().optional(), // Uses sentence.videoPrompt if not provided
+  cameraMovement: z.string().optional(),
+  motionStrength: z.number().min(0).max(1).optional(),
+});
+
+/**
+ * POST /api/v1/sentences/:sentenceId/generate-video
+ * STORY-5-4: Trigger video generation for a single sentence
+ * Requires: sentence must have imageFile (source image required)
+ */
+imagesRouter.post('/sentences/:sentenceId/generate-video', async (req: Request, res: Response, next) => {
+  try {
+    const sentenceId = req.params.sentenceId as string;
+
+    // Validate request body
+    const parsed = generateVideoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.errors.map(e => e.message).join(', '),
+        },
+      });
+    }
+
+    const { prompt, cameraMovement, motionStrength } = parsed.data;
+
+    // Get sentence and verify it exists
+    const sentence = await db.select().from(sentences).where(eq(sentences.id, sentenceId)).get();
+    if (!sentence) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Sentence not found' },
+      });
+    }
+
+    // AC: 23 - Button disabled if selected sentence has no imageFile
+    if (!sentence.imageFile) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_SOURCE_IMAGE', message: 'Sentence must have an image before generating video' },
+      });
+    }
+
+    // Get section to find project
+    const section = await db.select().from(sections).where(eq(sections.id, sentence.sectionId)).get();
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Section not found' },
+      });
+    }
+
+    const projectId = section.projectId;
+
+    // Use provided prompt or fall back to sentence's videoPrompt/imagePrompt/text
+    const videoPrompt = prompt || sentence.videoPrompt || sentence.imagePrompt || sentence.text;
+
+    // Create job record
+    const job = await jobService.create({
+      sentenceId,
+      projectId,
+      jobType: 'video',
+    });
+
+    // Trigger Inngest event for video generation
+    await inngest.send({
+      name: 'video/generate',
+      data: {
+        sentenceId,
+        projectId,
+        imageFile: sentence.imageFile,
+        prompt: videoPrompt,
+        cameraMovement: cameraMovement || sentence.cameraMovement || 'static',
+        motionStrength: motionStrength ?? sentence.motionStrength ?? 0.5,
+      },
+    });
+
+    res.status(202).json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: 'queued',
+        message: 'Video generation started',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/v1/sentences/:sentenceId/video-status
+ * Get the status of video generation for a sentence
+ */
+imagesRouter.get('/sentences/:sentenceId/video-status', async (req: Request, res: Response, next) => {
+  try {
+    const sentenceId = req.params.sentenceId as string;
+
+    const job = await jobService.getLatestBySentenceAndType(sentenceId, 'video');
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'No video generation job found for this sentence' },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        jobId: job.id,
+        status: job.status,
+        progress: job.progress,
+        resultFile: job.resultFile,
+        errorMessage: job.errorMessage,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /**
  * POST /api/v1/images/generate-text-to-image
  * Test endpoint to generate an image using text-to-image workflow

@@ -15,6 +15,7 @@ import { Button } from '../ui/button';
 import { useSceneGeneration, type FailedSentence } from '../../hooks/useSceneGeneration';
 import ErrorSummaryDialog from './ErrorSummaryDialog';
 import RegenerateWarningModal from './RegenerateWarningModal';
+import VideoRegenerateModal from './VideoRegenerateModal';
 
 interface BulkGenerationToolbarProps {
   projectId: string | null;
@@ -34,8 +35,11 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
 }) => {
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+  const [showVideoRegenerateModal, setShowVideoRegenerateModal] = useState(false);
   const [completionNotification, setCompletionNotification] = useState<string | null>(null);
   const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // STORY-5-4: Track if we're generating videos specifically
+  const [isGeneratingVideos, setIsGeneratingVideos] = useState(false);
 
   const {
     isGenerating,
@@ -50,8 +54,11 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
     completedCount,
     sceneStats,
     hasExistingContent,
+    hasExistingVideos,
+    canGenerateVideos,
     fetchSceneStats,
     generateAll,
+    generateAllVideos,
     cancelAll,
     retryFailed,
     clearStates,
@@ -138,6 +145,50 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
     fetchSceneStats();
   };
 
+  // STORY-5-4: Handle video generation button click (AC: 30-38)
+  const handleVideoButtonClick = () => {
+    if (hasExistingVideos) {
+      setShowVideoRegenerateModal(true);
+    } else {
+      handleGenerateAllVideos(false);
+    }
+  };
+
+  // STORY-5-4: Generate all videos
+  const handleGenerateAllVideos = async (force: boolean) => {
+    setIsGeneratingVideos(true);
+    clearStates();
+    const result = await generateAllVideos(force);
+    if (result) {
+      const total = result.queued;
+      if (total === 0) {
+        setCompletionNotification('No videos to generate! Ensure sentences have images and video prompts.');
+        if (notificationTimeoutRef.current) {
+          clearTimeout(notificationTimeoutRef.current);
+        }
+        notificationTimeoutRef.current = setTimeout(() => {
+          setCompletionNotification(null);
+        }, 3000);
+        setIsGeneratingVideos(false);
+      }
+    } else {
+      setIsGeneratingVideos(false);
+    }
+  };
+
+  // STORY-5-4: Handle video regenerate confirmation from modal
+  const handleVideoRegenerateConfirm = async () => {
+    setShowVideoRegenerateModal(false);
+    await handleGenerateAllVideos(true);
+  };
+
+  // Reset video generating flag when generation completes
+  useEffect(() => {
+    if (!isGenerating && isGeneratingVideos) {
+      setIsGeneratingVideos(false);
+    }
+  }, [isGenerating, isGeneratingVideos]);
+
   const handleCancel = async () => {
     await cancelAll();
   };
@@ -195,17 +246,67 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
     );
   };
 
+  // STORY-5-4: Get video button content
+  const getVideoButtonContent = () => {
+    if (isLoading && isGeneratingVideos) {
+      return (
+        <>
+          <Icons.RefreshCw size={16} className="animate-spin" />
+          Starting...
+        </>
+      );
+    }
+
+    if (isGenerating && totalVideos > 0) {
+      return (
+        <>
+          <Icons.RefreshCw size={16} className="animate-spin" />
+          Videos... ({videosCompleted}/{totalVideos})
+        </>
+      );
+    }
+
+    // Show "Re-Generate" if videos already exist (AC: 38)
+    if (hasExistingVideos) {
+      return (
+        <>
+          <Icons.RefreshCw size={16} />
+          Re-Generate Videos
+        </>
+      );
+    }
+
+    return (
+      <>
+        <Icons.Video size={16} />
+        Generate All Videos
+      </>
+    );
+  };
+
   return (
     <div className="flex items-center gap-3">
-      {/* Generate Button */}
+      {/* Generate Images Button */}
       <Button
-        variant={isGenerating ? 'outline' : 'default'}
+        variant={isGenerating && !isGeneratingVideos ? 'outline' : 'default'}
         onClick={handleButtonClick}
         disabled={isLoading || isGenerating || !projectId}
         className="min-w-[200px]"
       >
         {getButtonContent()}
       </Button>
+
+      {/* STORY-5-4: Generate Videos Button (AC: 30-32, 38) */}
+      {canGenerateVideos && (
+        <Button
+          variant={isGenerating && isGeneratingVideos ? 'outline' : 'secondary'}
+          onClick={handleVideoButtonClick}
+          disabled={isLoading || isGenerating || !projectId}
+          className="min-w-[180px]"
+        >
+          {getVideoButtonContent()}
+        </Button>
+      )}
 
       {/* Cancel Button - only show when generating */}
       {isGenerating && (
@@ -299,6 +400,15 @@ export const BulkGenerationToolbar: React.FC<BulkGenerationToolbarProps> = ({
         isOpen={showRegenerateModal}
         onConfirm={handleRegenerateConfirm}
         onCancel={() => setShowRegenerateModal(false)}
+        sceneStats={sceneStats}
+        isLoading={isLoading}
+      />
+
+      {/* STORY-5-4: Video Regenerate Warning Modal */}
+      <VideoRegenerateModal
+        isOpen={showVideoRegenerateModal}
+        onConfirm={handleVideoRegenerateConfirm}
+        onCancel={() => setShowVideoRegenerateModal(false)}
         sceneStats={sceneStats}
         isLoading={isLoading}
       />
