@@ -15,7 +15,7 @@ const DEFAULT_VIDEO_WORKFLOW = path.join(
 );
 
 // Default video settings (exported for testing)
-export const DEFAULT_FPS = 16;
+export const DEFAULT_FPS = 24;
 export const DEFAULT_DURATION_SECONDS = 5;
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 720;
@@ -54,8 +54,9 @@ export function calculateFrameCount(durationMs: number | null | undefined, fps: 
   // Convert ms to seconds and calculate frames
   const durationSeconds = durationMs / 1000;
 
-  // Clamp to reasonable bounds (2-15 seconds for video generation)
-  const clampedDuration = Math.max(2, Math.min(15, durationSeconds));
+  // Clamp to reasonable bounds (5-15 seconds for video generation)
+  // Minimum 5 seconds ensures short narrations still have adequate video
+  const clampedDuration = Math.max(5, Math.min(15, durationSeconds));
 
   return Math.round(clampedDuration * fps);
 }

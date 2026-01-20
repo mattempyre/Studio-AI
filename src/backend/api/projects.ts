@@ -959,11 +959,23 @@ projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
 
     const sectionIds = projectSections.map(s => s.id);
 
+    // Create a map of section order for sorting
+    const sectionOrderMap = new Map(projectSections.map(s => [s.id, s.order]));
+
     // Get all sentences with their prompts and file status
     let allSentences = await db.select()
       .from(sentences)
-      .where(inArray(sentences.sectionId, sectionIds))
-      .orderBy(sentences.order);
+      .where(inArray(sentences.sectionId, sectionIds));
+
+    // Sort by section order first, then by sentence order within section
+    allSentences.sort((a, b) => {
+      const sectionOrderA = sectionOrderMap.get(a.sectionId) ?? 0;
+      const sectionOrderB = sectionOrderMap.get(b.sectionId) ?? 0;
+      if (sectionOrderA !== sectionOrderB) {
+        return sectionOrderA - sectionOrderB;
+      }
+      return a.order - b.order;
+    });
 
     // If force=true, mark all sentences with prompts as dirty to force regeneration
     if (force) {
@@ -979,8 +991,17 @@ projectsRouter.post('/:id/generate-scenes', async (req, res, next) => {
         // Re-fetch sentences to get updated dirty flags
         allSentences = await db.select()
           .from(sentences)
-          .where(inArray(sentences.sectionId, sectionIds))
-          .orderBy(sentences.order);
+          .where(inArray(sentences.sectionId, sectionIds));
+
+        // Re-sort after re-fetch
+        allSentences.sort((a, b) => {
+          const sectionOrderA = sectionOrderMap.get(a.sectionId) ?? 0;
+          const sectionOrderB = sectionOrderMap.get(b.sectionId) ?? 0;
+          if (sectionOrderA !== sectionOrderB) {
+            return sectionOrderA - sectionOrderB;
+          }
+          return a.order - b.order;
+        });
       }
     }
 
@@ -1141,11 +1162,23 @@ projectsRouter.post('/:id/generate-videos', async (req, res, next) => {
 
     const sectionIds = projectSections.map(s => s.id);
 
-    // Get all sentences
+    // Create a map of section order for sorting
+    const sectionOrderMap = new Map(projectSections.map(s => [s.id, s.order]));
+
+    // Get all sentences and sort by section order, then sentence order
     let allSentences = await db.select()
       .from(sentences)
-      .where(inArray(sentences.sectionId, sectionIds))
-      .orderBy(sentences.order);
+      .where(inArray(sentences.sectionId, sectionIds));
+
+    // Sort by section order first, then by sentence order within section
+    allSentences.sort((a, b) => {
+      const sectionOrderA = sectionOrderMap.get(a.sectionId) ?? 0;
+      const sectionOrderB = sectionOrderMap.get(b.sectionId) ?? 0;
+      if (sectionOrderA !== sectionOrderB) {
+        return sectionOrderA - sectionOrderB;
+      }
+      return a.order - b.order;
+    });
 
     // Filter to specific sentences if provided
     if (sentenceIds && Array.isArray(sentenceIds) && sentenceIds.length > 0) {
@@ -1166,8 +1199,17 @@ projectsRouter.post('/:id/generate-videos', async (req, res, next) => {
         // Re-fetch sentences to get updated dirty flags
         allSentences = await db.select()
           .from(sentences)
-          .where(inArray(sentences.sectionId, sectionIds))
-          .orderBy(sentences.order);
+          .where(inArray(sentences.sectionId, sectionIds));
+
+        // Re-sort after re-fetch
+        allSentences.sort((a, b) => {
+          const sectionOrderA = sectionOrderMap.get(a.sectionId) ?? 0;
+          const sectionOrderB = sectionOrderMap.get(b.sectionId) ?? 0;
+          if (sectionOrderA !== sectionOrderB) {
+            return sectionOrderA - sectionOrderB;
+          }
+          return a.order - b.order;
+        });
 
         if (sentenceIds && Array.isArray(sentenceIds) && sentenceIds.length > 0) {
           allSentences = allSentences.filter(s => sentenceIds.includes(s.id));
@@ -1225,12 +1267,20 @@ projectsRouter.post('/:id/generate-videos', async (req, res, next) => {
       },
     });
 
+    // Build videoJobs array for frontend tracking (all share the same batchJobId)
+    const videoJobs = sentencesNeedingVideos.map(sentence => ({
+      sentenceId: sentence.id,
+      jobId: batchJob.id,
+    }));
+
     res.json({
       success: true,
       data: {
         queued: sentencesNeedingVideos.length,
+        totalSentences: allSentences.length,
         batchId,
         batchJobId: batchJob.id,
+        videoJobs,
         message: `Queued batch of ${sentencesNeedingVideos.length} videos (model will stay loaded in VRAM)`,
       },
     });

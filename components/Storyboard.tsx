@@ -683,7 +683,15 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
 
                                                   if (showVideo) {
                                                       return (
-                                                          <video src={scene.videoUrl} className="w-full h-full object-cover" controls={false} muted loop autoPlay />
+                                                          <video
+                                                            src={scene.videoUrl}
+                                                            className="w-full h-full object-cover"
+                                                            controls={false}
+                                                            muted
+                                                            loop
+                                                            onMouseEnter={(e) => e.currentTarget.play()}
+                                                            onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                                                          />
                                                       );
                                                   } else if (showImage) {
                                                       return (
@@ -762,7 +770,14 @@ const Storyboard: React.FC<StoryboardProps> = ({ project, onUpdateProject, onNex
 
                                           if (showVideo) {
                                               return (
-                                                  <video src={scene.videoUrl} className="w-full h-full object-cover" muted loop autoPlay />
+                                                  <video
+                                                    src={scene.videoUrl}
+                                                    className="w-full h-full object-cover"
+                                                    muted
+                                                    loop
+                                                    onMouseEnter={(e) => e.currentTarget.play()}
+                                                    onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                                                  />
                                               );
                                           } else if (showImage) {
                                               return (

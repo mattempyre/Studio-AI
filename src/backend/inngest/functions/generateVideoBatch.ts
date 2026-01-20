@@ -15,9 +15,30 @@ const BATCH_VIDEO_WORKFLOW = path.join(
 );
 
 // Default video settings
-const DEFAULT_FPS = 16;
+const DEFAULT_FPS = 24;
+const DEFAULT_DURATION_SECONDS = 5;
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 720;
+
+/**
+ * Calculate frame count based on target duration and FPS.
+ * Matches the logic in generateVideo.ts for consistency.
+ */
+function calculateFrameCount(durationMs: number | null | undefined, fps: number = DEFAULT_FPS): number {
+  if (!durationMs || durationMs <= 0) {
+    // Default to 5 seconds if no audio duration
+    return Math.round(DEFAULT_DURATION_SECONDS * fps);
+  }
+
+  // Convert ms to seconds and calculate frames
+  const durationSeconds = durationMs / 1000;
+
+  // Clamp to reasonable bounds (5-15 seconds for video generation)
+  // Minimum 5 seconds ensures short narrations still have adequate video
+  const clampedDuration = Math.max(5, Math.min(15, durationSeconds));
+
+  return Math.round(clampedDuration * fps);
+}
 
 // Timeout per video in milliseconds (5 minutes per video)
 const TIMEOUT_PER_VIDEO_MS = 5 * 60 * 1000;
@@ -148,7 +169,8 @@ export const generateVideoBatchFunction = inngest.createFunction(
               motionStrength: sentence.motionStrength ?? 0.5,
               width: DEFAULT_WIDTH,
               height: DEFAULT_HEIGHT,
-              frames: sentence.frames ?? 81,
+              // Calculate frames from audio duration (matches single video behavior)
+              frames: calculateFrameCount(sentence.audioDuration, DEFAULT_FPS),
               fps: DEFAULT_FPS,
               seed: Math.floor(Math.random() * Number.MAX_SAFE_INTEGER),
             }

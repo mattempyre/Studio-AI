@@ -217,9 +217,18 @@ export function useSceneGeneration(
     }
   }, [projectId, fetchSceneStats]);
 
+  // Track batch progress separately (for video-batch and image-batch)
+  const [batchProgress, setBatchProgress] = useState<number>(0);
+
   // WebSocket integration for real-time progress
   const { status: wsStatus } = useWebSocket(projectId, {
     onProgress: useCallback((event: ProgressEvent) => {
+      // Handle batch progress events (no sentenceId, just overall progress)
+      if (event.jobType === 'video-batch' || event.jobType === 'image-batch') {
+        setBatchProgress(event.progress);
+        return;
+      }
+
       if (event.jobType !== 'image' && event.jobType !== 'video') return;
       if (!event.sentenceId) return;
 
@@ -245,6 +254,12 @@ export function useSceneGeneration(
     }, []),
 
     onJobComplete: useCallback((event: JobCompleteEvent) => {
+      // Handle batch completion (reset batch progress)
+      if (event.jobType === 'video-batch' || event.jobType === 'image-batch') {
+        setBatchProgress(100);
+        return;
+      }
+
       if (event.jobType !== 'image' && event.jobType !== 'video') return;
       if (!event.sentenceId) return;
 
@@ -282,6 +297,12 @@ export function useSceneGeneration(
     }, [onImageComplete, onVideoComplete]),
 
     onJobFailed: useCallback((event: JobFailedEvent) => {
+      // Handle batch failure
+      if (event.jobType === 'video-batch' || event.jobType === 'image-batch') {
+        setBatchProgress(0);
+        return;
+      }
+
       if (event.jobType !== 'image' && event.jobType !== 'video') return;
       if (!event.sentenceId) return;
 
@@ -600,6 +621,7 @@ export function useSceneGeneration(
     setError(null);
     setTotalImages(0);
     setTotalVideos(0);
+    setBatchProgress(0);
   }, []);
 
   return {

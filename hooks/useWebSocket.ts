@@ -14,7 +14,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 // Types (mirroring backend types for client-side use)
 // =============================================================================
 
-export type JobType = 'script' | 'script-long' | 'audio' | 'image' | 'video' | 'export';
+export type JobType = 'script' | 'script-long' | 'audio' | 'image' | 'image-batch' | 'video' | 'video-batch' | 'export';
 
 export interface ProgressEvent {
   type: 'progress';
