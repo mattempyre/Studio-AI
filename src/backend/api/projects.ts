@@ -6,6 +6,7 @@ import { createProjectSchema, updateProjectSchema, addToCastSchema, addToCastBat
 import { deleteProjectMedia } from '../services/outputPaths.js';
 import { inngest } from '../inngest/client.js';
 import { jobService } from '../services/jobService.js';
+import { calculateFrameCount } from '../inngest/functions/generateVideo.js';
 
 export const projectsRouter = Router();
 
@@ -1194,40 +1195,43 @@ projectsRouter.post('/:id/generate-videos', async (req, res, next) => {
       });
     }
 
-    // Queue video generation jobs
-    const videoJobs: { sentenceId: string; jobId: string }[] = [];
+    // Create batch ID for tracking
+    const batchId = nanoid();
 
-    for (const sentence of sentencesNeedingVideos) {
-      // Create job record for tracking
-      const job = await jobService.create({
-        sentenceId: sentence.id,
+    // Create batch job record for tracking
+    const batchJob = await jobService.create({
+      projectId: id,
+      jobType: 'video-batch',
+    });
+
+    // Prepare sentence data for batch event
+    // Calculate frames based on audio duration for each sentence
+    const sentenceData = sentencesNeedingVideos.map(sentence => ({
+      sentenceId: sentence.id,
+      imageFile: sentence.imageFile!,
+      prompt: sentence.videoPrompt!,
+      cameraMovement: sentence.cameraMovement || 'static',
+      motionStrength: sentence.motionStrength ?? 0.5,
+      frames: calculateFrameCount(sentence.audioDuration),
+    }));
+
+    // Queue single batch event (keeps model loaded in VRAM for all videos)
+    await inngest.send({
+      name: 'video/generate-batch',
+      data: {
+        batchId,
         projectId: id,
-        jobType: 'video',
-      });
-
-      // Queue the Inngest event
-      await inngest.send({
-        name: 'video/generate',
-        data: {
-          sentenceId: sentence.id,
-          projectId: id,
-          imageFile: sentence.imageFile!,
-          prompt: sentence.videoPrompt!,
-          cameraMovement: sentence.cameraMovement || 'static',
-          motionStrength: sentence.motionStrength || 0.5,
-        },
-      });
-
-      videoJobs.push({ sentenceId: sentence.id, jobId: job.id });
-    }
+        sentences: sentenceData,
+      },
+    });
 
     res.json({
       success: true,
       data: {
-        queued: videoJobs.length,
-        totalEligible: sentencesNeedingVideos.length,
-        videoJobs,
-        message: `Queued ${videoJobs.length} video generation jobs`,
+        queued: sentencesNeedingVideos.length,
+        batchId,
+        batchJobId: batchJob.id,
+        message: `Queued batch of ${sentencesNeedingVideos.length} videos (model will stay loaded in VRAM)`,
       },
     });
   } catch (error) {

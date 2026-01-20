@@ -13,6 +13,7 @@ export { generateImageBatchFunction } from './generateImageBatch.js';
 export { generateImagePromptsFunction } from './generatePrompts.js';
 export { generateVideoPromptsFunction } from './generateVideoPrompts.js';
 export { generateVideoFunction, calculateFrameCount, DEFAULT_FPS, DEFAULT_DURATION_SECONDS } from './generateVideo.js';
+export { generateVideoBatchFunction } from './generateVideoBatch.js';
 
 // Future functions to be added:
 // export { exportProject } from './export.js';

@@ -17,6 +17,7 @@ import {
   generateImagePromptsFunction,
   generateVideoPromptsFunction,
   generateVideoFunction,
+  generateVideoBatchFunction,
 } from './functions/index.js';
 
 // All functions to be registered with Inngest
@@ -35,6 +36,7 @@ export const functions = [
   generateImagePromptsFunction,
   generateVideoPromptsFunction,
   generateVideoFunction,
+  generateVideoBatchFunction,
   // Future functions:
   // exportProject,
 ];

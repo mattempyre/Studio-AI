@@ -1,7 +1,7 @@
 import { inngest } from '../client.js';
 import { createComfyUIClient } from '../../clients/comfyui.js';
 import { jobService } from '../../services/jobService.js';
-import { getImagePath, ensureOutputDir, toMediaUrl } from '../../services/outputPaths.js';
+import { getImagePath, ensureOutputDir, toMediaUrl, fromMediaUrl } from '../../services/outputPaths.js';
 import { db, sentences } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import * as fs from 'fs/promises';
@@ -82,17 +82,8 @@ export const generateImageEditFunction = inngest.createFunction(
 
       // Step 3: Resolve source image path (convert media URL to filesystem path)
       const resolvedSourcePath = await step.run('resolve-source-image', async () => {
-        const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-
-        // sourceImagePath is a media URL like /media/projects/{projectId}/images/{sentenceId}.png
-        // Convert to filesystem path
-        if (sourceImagePath.startsWith('/media/')) {
-          const relativePath = sourceImagePath.replace('/media/', '');
-          return path.join(DATA_DIR, relativePath);
-        }
-
-        // If it's already an absolute path, use it directly
-        return sourceImagePath;
+        // Convert media URL to filesystem path using the centralized utility
+        return fromMediaUrl(sourceImagePath);
       });
 
       // Step 4: Save mask image to temp file (for inpaint mode)

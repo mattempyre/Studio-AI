@@ -1,7 +1,7 @@
 import { inngest } from '../client.js';
 import { createComfyUIClient } from '../../clients/comfyui.js';
 import { jobService } from '../../services/jobService.js';
-import { getVideoPath, ensureOutputDir, toMediaUrl } from '../../services/outputPaths.js';
+import { getVideoPath, ensureOutputDir, toMediaUrl, fromMediaUrl } from '../../services/outputPaths.js';
 import { db, sentences, generationModels } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
 import * as path from 'path';
@@ -198,12 +198,8 @@ export const generateVideoFunction = inngest.createFunction(
       const uploadedImageFilename = await step.run('upload-source-image', async () => {
         const comfyui = createComfyUIClient();
 
-        // Convert media URL to filesystem path
-        // imageFile is like /media/projects/{projectId}/images/{sentenceId}.png
-        // Need to convert to filesystem path
-        const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-        const mediaPath = imageFile.replace(/^\/media\//, '');
-        const localPath = path.join(DATA_DIR, mediaPath);
+        // Convert media URL to filesystem path using the centralized utility
+        const localPath = fromMediaUrl(imageFile);
 
         await jobService.updateProgressWithBroadcast(job.id, 20, {
           projectId: isTestRun ? undefined : projectId,

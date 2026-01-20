@@ -74,6 +74,7 @@ export interface VideoGenerationParams {
   frames?: number;
   fps?: number;
   seed?: number;
+  filenamePrefix?: string; // Output filename prefix for batch processing
 }
 
 /**
@@ -393,6 +394,13 @@ export class ComfyUIClient {
         if (params.fps !== undefined) updates.fps = params.fps;
         if (Object.keys(updates).length > 0) {
           injections[nodeId] = updates;
+        }
+      }
+
+      // SaveVideo node - inject filename prefix for batch processing
+      if (node.class_type === 'SaveVideo') {
+        if (params.filenamePrefix !== undefined) {
+          injections[nodeId] = { filename_prefix: params.filenamePrefix };
         }
       }
     }
@@ -920,18 +928,43 @@ export class ComfyUIClient {
   }
 
   /**
+   * Queue a video workflow without waiting for completion.
+   * Used for batch processing to keep models loaded in VRAM.
+   * @returns promptId for tracking
+   */
+  async queueVideoWorkflow(
+    workflowPath: string,
+    params: VideoGenerationParams
+  ): Promise<{ promptId: string; workflow: ComfyUIWorkflow }> {
+    const workflow = await this.loadWorkflow(workflowPath);
+    const prepared = this.prepareVideoWorkflow(workflow, params);
+    const promptId = await this.queueWorkflow(prepared);
+    return { promptId, workflow: prepared };
+  }
+
+  /**
    * Wait for a batch of prompts to complete and download their outputs.
    * Processes completions as they happen via WebSocket.
+   *
+   * @param promptIds - Array of prompt IDs to wait for
+   * @param outputPaths - Array of output paths corresponding to each prompt
+   * @param onEachComplete - Callback fired when each prompt completes
+   * @param onProgress - Callback fired after each completion with progress info
+   * @param timeoutMs - Optional timeout in milliseconds (defaults to instance timeout)
    */
   async waitForPromptBatch(
     promptIds: string[],
     outputPaths: string[],
     onEachComplete?: (index: number, outputPath: string) => void | Promise<void>,
-    onProgress?: (completed: number, total: number) => void | Promise<void>
+    onProgress?: (completed: number, total: number) => void | Promise<void>,
+    timeoutMs?: number
   ): Promise<string[]> {
     const results: string[] = new Array(promptIds.length).fill('');
     const pending = new Set(promptIds);
     let completed = 0;
+
+    // Use provided timeout or fall back to instance timeout
+    const effectiveTimeout = timeoutMs ?? this.timeout;
 
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`${this.wsUrl}/ws?clientId=${this.clientId}`);
@@ -941,9 +974,9 @@ export class ComfyUIClient {
         if (!resolved) {
           resolved = true;
           ws.close();
-          reject(new ComfyUIError('Timeout waiting for batch completion', 'TIMEOUT'));
+          reject(new ComfyUIError(`Timeout waiting for batch completion after ${Math.round(effectiveTimeout / 1000)}s`, 'TIMEOUT'));
         }
-      }, this.timeout);
+      }, effectiveTimeout);
 
       const checkComplete = () => {
         if (pending.size === 0 && !resolved) {

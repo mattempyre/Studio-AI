@@ -256,6 +256,36 @@ export type StudioEvents = {
     };
   };
 
+  // Batch video generation (keeps model loaded in VRAM across multiple videos)
+  'video/generate-batch': {
+    data: {
+      batchId: string;               // Unique batch identifier
+      projectId: string;
+      sentences: Array<{
+        sentenceId: string;
+        imageFile: string;           // Path to source image
+        prompt: string;              // Video prompt
+        cameraMovement?: string;     // Camera movement type
+        motionStrength?: number;     // Motion intensity (0-1)
+        frames?: number;             // Frame count (calculated from audio duration)
+      }>;
+    };
+  };
+  'video/batch-completed': {
+    data: {
+      batchId: string;
+      projectId: string;
+      completed: number;
+      failed: number;
+      results: Array<{
+        sentenceId: string;
+        status: 'completed' | 'failed';
+        videoFile?: string;
+        error?: string;
+      }>;
+    };
+  };
+
   // Bulk generation events
   'project/generate-all': {
     data: {

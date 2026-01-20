@@ -180,3 +180,41 @@ export function toMediaUrl(filesystemPath: string): string {
   console.warn(`toMediaUrl: unexpected path format: ${filesystemPath}`);
   return filesystemPath;
 }
+
+/**
+ * Convert a media URL back to a filesystem path.
+ *
+ * Takes URLs like:
+ *   - /media/projects/proj-123/images/sent-456.png
+ *   - /media/data/projects/proj-123/images/sent-456.png (legacy format)
+ *
+ * Returns: {OUTPUT_DIR}/proj-123/images/sent-456.png
+ *
+ * This is the inverse of toMediaUrl and handles legacy URL formats.
+ */
+export function fromMediaUrl(mediaUrl: string): string {
+  const outputDir = getOutputDir();
+
+  // Handle the correct format: /media/projects/{projectId}/...
+  if (mediaUrl.startsWith('/media/projects/')) {
+    const relativePath = mediaUrl.replace('/media/projects/', '');
+    return path.join(outputDir, relativePath);
+  }
+
+  // Handle legacy format: /media/data/projects/{projectId}/...
+  // This can occur if data was generated with incorrect path construction
+  const legacyMatch = mediaUrl.match(/^\/media\/(?:data\/)*projects\/(.+)$/);
+  if (legacyMatch) {
+    return path.join(outputDir, legacyMatch[1]);
+  }
+
+  // Handle format without /media/ prefix (shouldn't happen but be defensive)
+  if (mediaUrl.startsWith('/projects/') || mediaUrl.startsWith('projects/')) {
+    const relativePath = mediaUrl.replace(/^\/?projects\//, '');
+    return path.join(outputDir, relativePath);
+  }
+
+  // Fallback: assume it's already a filesystem path
+  console.warn(`fromMediaUrl: unexpected URL format: ${mediaUrl}`);
+  return mediaUrl;
+}
