@@ -1,101 +1,39 @@
 import { inngest } from '../client.js';
-import { createComfyUIClient } from '../../clients/comfyui.js';
 import { jobService } from '../../services/jobService.js';
-import { getVideoPath, ensureOutputDir, toMediaUrl, fromMediaUrl } from '../../services/outputPaths.js';
 import { db, sentences } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
-import * as path from 'path';
-
-// Batch workflow path (optimized for batch queue processing)
-const BATCH_VIDEO_WORKFLOW = path.join(
-  process.cwd(),
-  'workflows',
-  'video',
-  'video_wan2_2_14B_i2v_batch.json'
-);
-
-// Default video settings
-const DEFAULT_FPS = 24;
-const DEFAULT_DURATION_SECONDS = 5;
-const DEFAULT_WIDTH = 1280;
-const DEFAULT_HEIGHT = 720;
-
-/**
- * Calculate frame count based on target duration and FPS.
- * Matches the logic in generateVideo.ts for consistency.
- */
-function calculateFrameCount(durationMs: number | null | undefined, fps: number = DEFAULT_FPS): number {
-  if (!durationMs || durationMs <= 0) {
-    // Default to 5 seconds if no audio duration
-    return Math.round(DEFAULT_DURATION_SECONDS * fps);
-  }
-
-  // Convert ms to seconds and calculate frames
-  const durationSeconds = durationMs / 1000;
-
-  // Clamp to reasonable bounds (5-15 seconds for video generation)
-  // Minimum 5 seconds ensures short narrations still have adequate video
-  const clampedDuration = Math.max(5, Math.min(15, durationSeconds));
-
-  return Math.round(clampedDuration * fps);
-}
-
-// Timeout per video in milliseconds (5 minutes per video)
-const TIMEOUT_PER_VIDEO_MS = 5 * 60 * 1000;
-
-// Valid camera movement values
-const VALID_CAMERA_MOVEMENTS = ['static', 'pan_left', 'pan_right', 'zoom_in', 'zoom_out', 'orbit', 'truck'] as const;
-type CameraMovement = typeof VALID_CAMERA_MOVEMENTS[number];
-
-/**
- * Validate and normalize camera movement value.
- */
-function validateCameraMovement(value: string | undefined): CameraMovement {
-  if (!value) return 'static';
-  const normalized = value.toLowerCase().trim();
-  if (VALID_CAMERA_MOVEMENTS.includes(normalized as CameraMovement)) {
-    return normalized as CameraMovement;
-  }
-  return 'static';
-}
 
 interface BatchSentenceResult {
   sentenceId: string;
-  status: 'completed' | 'failed';
-  videoFile?: string;
+  status: 'queued' | 'failed';
   error?: string;
 }
 
-interface QueuedPrompt {
-  promptId: string;
-  sentenceId: string;
-  outputPath: string;
-  prompt: string;
-}
-
 /**
- * Inngest function for batch video generation using ComfyUI.
+ * Inngest function for batch video generation.
  *
- * Key optimization: All videos are queued to ComfyUI at once, then we wait for
- * all completions. This keeps models loaded in VRAM throughout the entire batch
- * because ComfyUI's queue processor doesn't unload models between queue items.
+ * This function dispatches individual video/generate events for each sentence,
+ * allowing Inngest to handle concurrency, retries, and progress tracking per video.
  *
- * GPU-bound: only one batch at a time.
+ * Each video is generated independently, which provides:
+ * - Individual progress tracking per video
+ * - Automatic retries per video (not entire batch)
+ * - Real-time UI updates as each video completes
+ * - Better error isolation
+ *
+ * GPU-bound: Videos are processed one at a time via the single video function's concurrency limit.
  */
 export const generateVideoBatchFunction = inngest.createFunction(
   {
     id: 'generate-video-batch',
     name: 'Generate Video Batch',
-    concurrency: {
-      limit: 1, // GPU-bound - only one batch at a time
-    },
-    retries: 0, // Handle retries internally per-video
+    retries: 0, // Batch orchestration doesn't need retries - individual videos handle that
   },
   { event: 'video/generate-batch' },
   async ({ event, step, runId }) => {
     const { batchId, projectId, sentences: sentenceList } = event.data;
 
-    // Step 1: Initialize batch job
+    // Step 1: Initialize batch job for tracking
     const batchJob = await step.run('init-batch', async () => {
       const job = await jobService.create({
         projectId,
@@ -106,214 +44,83 @@ export const generateVideoBatchFunction = inngest.createFunction(
       return job;
     });
 
-    // Step 2: Ensure output directory exists
-    await step.run('ensure-output-dir', async () => {
-      await ensureOutputDir(projectId, 'videos');
-    });
-
-    // Step 3: Upload all source images to ComfyUI upfront
-    const uploadedImages = await step.run('upload-all-images', async () => {
-      const comfyui = createComfyUIClient();
-      const uploaded: Record<string, string> = {};
+    // Step 2: Dispatch individual video generation events
+    const dispatchResults = await step.run('dispatch-video-events', async () => {
+      const results: BatchSentenceResult[] = [];
 
       for (const sentence of sentenceList) {
         try {
-          const localPath = fromMediaUrl(sentence.imageFile);
-          const uploadedFilename = await comfyui.uploadImage(localPath);
-          uploaded[sentence.sentenceId] = uploadedFilename;
-        } catch (error) {
-          console.error(`Failed to upload image for sentence ${sentence.sentenceId}:`, error);
-        }
-      }
-
-      await jobService.updateProgressWithBroadcast(batchJob.id, 10, {
-        projectId,
-        jobType: 'video-batch',
-        message: `Uploaded ${Object.keys(uploaded).length}/${sentenceList.length} images to ComfyUI`,
-      });
-
-      return uploaded;
-    });
-
-    // Step 4: Queue ALL videos to ComfyUI at once
-    // This ensures models stay loaded in VRAM between videos
-    const queuedPrompts = await step.run('queue-all-videos', async () => {
-      const comfyui = createComfyUIClient();
-      const prompts: QueuedPrompt[] = [];
-      const failedSentences: string[] = [];
-
-      for (const sentence of sentenceList) {
-        const uploadedImageFilename = uploadedImages[sentence.sentenceId];
-        if (!uploadedImageFilename) {
-          failedSentences.push(sentence.sentenceId);
-          continue;
-        }
-
-        try {
-          // Mark sentence as generating
+          // Mark sentence as queued
           await db
             .update(sentences)
-            .set({ status: 'generating', updatedAt: new Date() })
+            .set({ status: 'queued', updatedAt: new Date() })
             .where(eq(sentences.id, sentence.sentenceId));
 
-          const outputPath = getVideoPath(projectId, sentence.sentenceId);
-
-          // Queue workflow without waiting for completion
-          const { promptId } = await comfyui.queueVideoWorkflow(
-            BATCH_VIDEO_WORKFLOW,
-            {
-              imageFile: uploadedImageFilename,
-              prompt: sentence.prompt,
-              negativePrompt: '',
-              cameraMovement: validateCameraMovement(sentence.cameraMovement),
-              motionStrength: sentence.motionStrength ?? 0.5,
-              width: DEFAULT_WIDTH,
-              height: DEFAULT_HEIGHT,
-              // Calculate frames from audio duration (matches single video behavior)
-              frames: calculateFrameCount(sentence.audioDuration, DEFAULT_FPS),
-              fps: DEFAULT_FPS,
-              seed: Math.floor(Math.random() * Number.MAX_SAFE_INTEGER),
-            }
-          );
-
-          prompts.push({
-            promptId,
+          results.push({
             sentenceId: sentence.sentenceId,
-            outputPath,
-            prompt: sentence.prompt,
+            status: 'queued',
           });
         } catch (error) {
-          console.error(`Failed to queue video for sentence ${sentence.sentenceId}:`, error);
-          failedSentences.push(sentence.sentenceId);
-
-          await db
-            .update(sentences)
-            .set({ status: 'failed', updatedAt: new Date() })
-            .where(eq(sentences.id, sentence.sentenceId));
+          console.error(`Failed to prepare sentence ${sentence.sentenceId}:`, error);
+          results.push({
+            sentenceId: sentence.sentenceId,
+            status: 'failed',
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
-      await jobService.updateProgressWithBroadcast(batchJob.id, 15, {
+      return results;
+    });
+
+    // Step 3: Send all video generation events at once
+    // Inngest will handle concurrency (one at a time due to GPU constraint)
+    await step.sendEvent(
+      'dispatch-videos',
+      sentenceList
+        .filter((sentence) =>
+          dispatchResults.some(
+            (r) => r.sentenceId === sentence.sentenceId && r.status === 'queued'
+          )
+        )
+        .map((sentence) => ({
+          name: 'video/generate' as const,
+          data: {
+            sentenceId: sentence.sentenceId,
+            projectId,
+            imageFile: sentence.imageFile,
+            prompt: sentence.prompt,
+            cameraMovement: sentence.cameraMovement || 'static',
+            motionStrength: sentence.motionStrength ?? 0.5,
+          },
+        }))
+    );
+
+    // Step 4: Update batch progress
+    await step.run('update-batch-progress', async () => {
+      const queued = dispatchResults.filter((r) => r.status === 'queued').length;
+      const failed = dispatchResults.filter((r) => r.status === 'failed').length;
+
+      await jobService.updateProgressWithBroadcast(batchJob.id, 100, {
         projectId,
         jobType: 'video-batch',
-        message: `Queued ${prompts.length}/${sentenceList.length} videos to ComfyUI`,
+        message: `Dispatched ${queued} videos for generation${failed > 0 ? ` (${failed} failed to queue)` : ''}`,
       });
 
-      return { prompts, failedSentences };
-    });
-
-    // Step 5: Wait for ALL videos to complete
-    // ComfyUI processes the queue sequentially, keeping models loaded
-    const batchResults = await step.run('wait-for-batch', async () => {
-      const comfyui = createComfyUIClient();
-      const { prompts, failedSentences } = queuedPrompts;
-
-      if (prompts.length === 0) {
-        return { completedResults: [], failedResults: failedSentences };
-      }
-
-      const promptIds = prompts.map((p) => p.promptId);
-      const outputPaths = prompts.map((p) => p.outputPath);
-      const completedResults: BatchSentenceResult[] = [];
-      const failedResults: string[] = [...failedSentences];
-
-      // Calculate dynamic timeout based on number of videos
-      const batchTimeout = prompts.length * TIMEOUT_PER_VIDEO_MS;
-
-      try {
-        await comfyui.waitForPromptBatch(
-          promptIds,
-          outputPaths,
-          // onEachComplete callback - fires when each video finishes
-          async (index, savedPath) => {
-            const queuedPrompt = prompts[index];
-            const mediaUrl = toMediaUrl(savedPath);
-
-            // Update database for this video
-            await db
-              .update(sentences)
-              .set({
-                videoFile: mediaUrl,
-                isVideoDirty: false,
-                status: 'completed',
-                updatedAt: new Date(),
-              })
-              .where(eq(sentences.id, queuedPrompt.sentenceId));
-
-            // Broadcast per-video completion
-            jobService.broadcastSentenceComplete({
-              projectId,
-              jobType: 'video',
-              sentenceId: queuedPrompt.sentenceId,
-              file: mediaUrl,
-            });
-
-            completedResults.push({
-              sentenceId: queuedPrompt.sentenceId,
-              status: 'completed',
-              videoFile: mediaUrl,
-            });
-          },
-          // onProgress callback - fires after each completion
-          async (completed, total) => {
-            const progressPercent = 15 + Math.round((completed / total) * 75);
-            await jobService.updateProgressWithBroadcast(batchJob.id, progressPercent, {
-              projectId,
-              jobType: 'video-batch',
-              message: `Generated ${completed}/${total} videos`,
-            });
-          },
-          batchTimeout
-        );
-      } catch (error) {
-        console.error('Batch processing error:', error);
-        // Mark any remaining prompts as failed
-        for (const queuedPrompt of prompts) {
-          const isCompleted = completedResults.some((r) => r.sentenceId === queuedPrompt.sentenceId);
-          if (!isCompleted) {
-            failedResults.push(queuedPrompt.sentenceId);
-            await db
-              .update(sentences)
-              .set({ status: 'failed', updatedAt: new Date() })
-              .where(eq(sentences.id, queuedPrompt.sentenceId));
-          }
-        }
-      }
-
-      return { completedResults, failedResults };
-    });
-
-    // Step 6: Finalize batch
-    const summary = await step.run('finalize-batch', async () => {
-      const { completedResults, failedResults } = batchResults;
-
-      // Build final results array
-      const results: BatchSentenceResult[] = [
-        ...completedResults,
-        ...failedResults.map((sentenceId) => ({
-          sentenceId,
-          status: 'failed' as const,
-          error: 'Generation failed or timed out',
-        })),
-      ];
-
+      // Mark batch job as completed - individual videos are now tracked separately
       await jobService.markCompletedWithBroadcast(batchJob.id, {
         projectId,
         jobType: 'video-batch',
       });
-
-      return {
-        completed: completedResults.length,
-        failed: failedResults.length,
-        total: sentenceList.length,
-        results,
-      };
     });
 
     return {
       success: true,
       batchId,
-      ...summary,
+      dispatched: dispatchResults.filter((r) => r.status === 'queued').length,
+      failed: dispatchResults.filter((r) => r.status === 'failed').length,
+      total: sentenceList.length,
+      results: dispatchResults,
     };
   }
 );

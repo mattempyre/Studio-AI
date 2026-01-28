@@ -335,6 +335,14 @@ export const jobService = {
     endMs?: number;
     duration?: number;
   }): void {
+    // Debug logging for broadcast
+    console.log('[jobService] Broadcasting sentence complete:', {
+      projectId: options.projectId,
+      jobType: options.jobType,
+      sentenceId: options.sentenceId,
+      file: options.file,
+    });
+
     broadcastJobComplete({
       projectId: options.projectId,
       jobId: `section-sentence-${options.sentenceId}`,

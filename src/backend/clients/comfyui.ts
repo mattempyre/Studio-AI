@@ -403,6 +403,21 @@ export class ComfyUIClient {
           injections[nodeId] = { filename_prefix: params.filenamePrefix };
         }
       }
+
+      // VHS_VideoCombine node (LTX-2 workflows) - inject filename prefix
+      if (node.class_type === 'VHS_VideoCombine') {
+        if (params.filenamePrefix !== undefined) {
+          injections[nodeId] = { filename_prefix: params.filenamePrefix };
+        }
+      }
+
+      // RandomNoise nodes (LTX-2 workflows) - inject seed (only first one)
+      if (node.class_type === 'RandomNoise' && !seedInjected) {
+        if (params.seed !== undefined) {
+          injections[nodeId] = { noise_seed: params.seed };
+          seedInjected = true;
+        }
+      }
     }
 
     return this.injectParams(workflow, injections);

@@ -4,15 +4,7 @@ import { jobService } from '../../services/jobService.js';
 import { getVideoPath, ensureOutputDir, toMediaUrl, fromMediaUrl } from '../../services/outputPaths.js';
 import { db, sentences, generationModels } from '../../db/index.js';
 import { eq } from 'drizzle-orm';
-import * as path from 'path';
-
-// Default workflow path for video generation (Wan 2.2 14B image-to-video)
-const DEFAULT_VIDEO_WORKFLOW = path.join(
-  process.cwd(),
-  'workflows',
-  'video',
-  'video_wan2_2_14B_i2v.json'
-);
+import { getVideoWorkflowPath } from '../../../../workflows/config.js';
 
 // Default video settings (exported for testing)
 export const DEFAULT_FPS = 24;
@@ -224,10 +216,8 @@ export const generateVideoFunction = inngest.createFunction(
           message: 'Processing video with ComfyUI (this may take 1-2 minutes)...',
         });
 
-        // Get workflow path from model config or use default
-        const workflowPath = modelConfig?.workflowFile
-          ? path.join(process.cwd(), modelConfig.workflowFile)
-          : DEFAULT_VIDEO_WORKFLOW;
+        // Get workflow path from config (LTX-2 Basic by default)
+        const workflowPath = getVideoWorkflowPath();
 
         return await comfyui.generateVideo(
           workflowPath,

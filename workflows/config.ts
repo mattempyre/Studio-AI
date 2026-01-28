@@ -17,10 +17,9 @@ export const workflows = {
 
   // Video generation workflows
   video: {
+    'ltx-2-basic': path.join(__dirname, 'video', 'LTX-2 Basic.json'),
     'wan-2.2': path.join(__dirname, 'video', 'wan-2.2.json'),
     'wan-2.2-14b': path.join(__dirname, 'video', 'video_wan2_2_14B_i2v.json'),
-    // Add more video models here
-    // 'ltx-2': path.join(__dirname, 'video', 'ltx-2.json'),
   },
 } as const;
 
@@ -29,7 +28,7 @@ export const workflows = {
  */
 export const defaults = {
   imageModel: 'flux-2' as keyof typeof workflows.image,
-  videoModel: 'wan-2.2' as keyof typeof workflows.video,
+  videoModel: 'ltx-2-basic' as keyof typeof workflows.video,
 };
 
 /**

@@ -48,9 +48,9 @@ export const MediaToggle: React.FC<MediaToggleProps> = ({
     onViewChange(view);
   };
 
-  const iconSize = size === 'sm' ? 10 : 12;
-  const textClass = size === 'sm' ? 'text-[10px]' : 'text-xs';
-  const paddingClass = size === 'sm' ? 'px-1.5 py-0.5' : 'px-2 py-1';
+  const iconSize = size === 'sm' ? 16 : 20;
+  const textClass = size === 'sm' ? 'text-xs' : 'text-sm';
+  const paddingClass = size === 'sm' ? 'px-3 py-1.5' : 'px-4 py-2';
 
   return (
     <div

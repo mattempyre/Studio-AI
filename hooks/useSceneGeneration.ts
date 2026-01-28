@@ -254,6 +254,14 @@ export function useSceneGeneration(
     }, []),
 
     onJobComplete: useCallback((event: JobCompleteEvent) => {
+      // Debug logging for job completion
+      console.log('[useSceneGeneration] job_complete event received:', {
+        type: event.type,
+        jobType: event.jobType,
+        sentenceId: event.sentenceId,
+        file: event.result?.file,
+      });
+
       // Handle batch completion (reset batch progress)
       if (event.jobType === 'video-batch' || event.jobType === 'image-batch') {
         setBatchProgress(100);

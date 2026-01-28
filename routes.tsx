@@ -272,6 +272,7 @@ function StoryboardPage() {
 
   // Callback when an individual video completes - update local state immediately
   const handleVideoComplete = (sentenceId: string, videoFile: string) => {
+    console.log('[routes.tsx] handleVideoComplete called:', { sentenceId, videoFile });
     setBackendProject((prev) => {
       if (!prev) return prev;
       // Update videoFile, status, and updatedAt (for cache busting)

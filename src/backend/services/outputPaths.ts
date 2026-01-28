@@ -214,6 +214,14 @@ export function fromMediaUrl(mediaUrl: string): string {
     return path.join(outputDir, relativePath);
   }
 
+  // Handle legacy Windows filesystem path format: data\projects\... or data/projects/...
+  // This occurs when paths were stored directly as filesystem paths instead of media URLs
+  const normalizedPath = mediaUrl.replace(/\\/g, '/');
+  const legacyDataMatch = normalizedPath.match(/^(?:\.\/)?data\/projects\/(.+)$/);
+  if (legacyDataMatch) {
+    return path.join(outputDir, legacyDataMatch[1]);
+  }
+
   // Fallback: assume it's already a filesystem path
   console.warn(`fromMediaUrl: unexpected URL format: ${mediaUrl}`);
   return mediaUrl;
