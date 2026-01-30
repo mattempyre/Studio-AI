@@ -17,6 +17,7 @@ const Timeline: React.FC<TimelineProps> = ({
   onSelectClip,
   onTrimStart,
   onTrimEnd,
+  onSlipOffsetChange,
   onDragStart,
   onDragOver,
   onDragEnd,
@@ -132,6 +133,7 @@ const Timeline: React.FC<TimelineProps> = ({
                 onSelect={onSelectClip}
                 onTrimStart={onTrimStart}
                 onTrimEnd={onTrimEnd}
+                onSlipOffsetChange={onSlipOffsetChange}
                 onDragStart={onDragStart}
                 registerVideoRef={registerVideoRef}
               />

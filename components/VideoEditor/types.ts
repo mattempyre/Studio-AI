@@ -21,6 +21,7 @@ export interface TimelineClipProps {
   onSelect: (sceneId: string) => void;
   onTrimStart: (sceneId: string, newTrimStart: number) => void;
   onTrimEnd: (sceneId: string, newTrimEnd: number) => void;
+  onSlipOffsetChange?: (sceneId: string, offset: number) => void;
   onDragStart: (e: React.DragEvent, sceneId: string) => void;
   registerVideoRef: (sceneId: string, element: HTMLVideoElement | null) => void;
 }
@@ -56,6 +57,7 @@ export interface TimelineProps {
   onSelectClip: (sceneId: string) => void;
   onTrimStart: (sceneId: string, newTrimStart: number) => void;
   onTrimEnd: (sceneId: string, newTrimEnd: number) => void;
+  onSlipOffsetChange?: (sceneId: string, offset: number) => void;
   onDragStart: (e: React.DragEvent, sceneId: string) => void;
   onDragOver: (e: React.DragEvent, index: number) => void;
   onDragEnd: () => void;

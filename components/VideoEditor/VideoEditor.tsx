@@ -154,6 +154,21 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ project, onUpdateProject }) =
     onUpdateProject({ ...project, scenes: recalculatedScenes });
   }, [project, onUpdateProject]);
 
+  // Handle slip offset changes (adjusts which portion of source video plays)
+  const handleSlipOffsetChange = useCallback((sceneId: string, newSlipOffset: number) => {
+    const updatedScenes = project.scenes.map(scene => {
+      if (scene.id === sceneId) {
+        return {
+          ...scene,
+          slipOffset: newSlipOffset
+        };
+      }
+      return scene;
+    });
+
+    onUpdateProject({ ...project, scenes: updatedScenes });
+  }, [project, onUpdateProject]);
+
   // Set in/out points (trim at current playhead)
   const handleSetInPoint = useCallback(() => {
     if (!timelineState.selectedClipId) return;
@@ -778,6 +793,7 @@ const VideoEditor: React.FC<VideoEditorProps> = ({ project, onUpdateProject }) =
           onSelectClip={handleSelectClip}
           onTrimStart={handleTrimStart}
           onTrimEnd={handleTrimEnd}
+          onSlipOffsetChange={handleSlipOffsetChange}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}

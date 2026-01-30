@@ -1,6 +1,6 @@
 # Story 10.1: Slip Editing UI for Video Timeline
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -16,7 +16,7 @@ Videos are now generated with 1 second of extra duration (0.5s handles on each e
 - Video handles: **Implemented** - New videos generate 1s longer
 - slipOffset in Scene type: **Implemented** - Defaults to 0
 - slipOffset in playback: **Implemented** - syncVideos respects slipOffset
-- Slip editing UI: **Not started** - This story
+- Slip editing UI: **Implemented** - This story
 
 ## Acceptance Criteria
 
@@ -29,34 +29,34 @@ Videos are now generated with 1 second of extra duration (0.5s handles on each e
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add slip editing state and event handlers to TimelineClip (AC: #1, #6)
-  - [ ] 1.1 Add `isSlipping` state to track Alt+drag operation
-  - [ ] 1.2 Detect Alt key press during mousedown on clip body (not trim handles)
-  - [ ] 1.3 Create `handleSlipMouseDown` handler that captures initial position
-  - [ ] 1.4 Calculate delta in seconds from pixel movement using pixelsPerSecond
-  - [ ] 1.5 Ensure slip drag doesn't trigger when clicking trim handles
+- [x] Task 1: Add slip editing state and event handlers to TimelineClip (AC: #1, #6)
+  - [x] 1.1 Add `isSlipping` state to track Alt+drag operation
+  - [x] 1.2 Detect Alt key press during mousedown on clip body (not trim handles)
+  - [x] 1.3 Create `handleSlipMouseDown` handler that captures initial position
+  - [x] 1.4 Calculate delta in seconds from pixel movement using pixelsPerSecond
+  - [x] 1.5 Ensure slip drag doesn't trigger when clicking trim handles
 
-- [ ] Task 2: Add slip offset clamping logic (AC: #3, #4)
-  - [ ] 2.1 Determine max slip range from video duration vs effective duration
-  - [ ] 2.2 For videos with handles: clamp between 0 and 1.0 seconds
-  - [ ] 2.3 For legacy videos without handles: disable slip (range = 0)
-  - [ ] 2.4 Calculate available slip based on `HANDLE_SECONDS * 2` constant
+- [x] Task 2: Add slip offset clamping logic (AC: #3, #4)
+  - [x] 2.1 Determine max slip range from video duration vs effective duration
+  - [x] 2.2 For videos with handles: clamp between 0 and 1.0 seconds
+  - [x] 2.3 For legacy videos without handles: disable slip (range = 0)
+  - [x] 2.4 Calculate available slip based on `HANDLE_SECONDS * 2` constant
 
-- [ ] Task 3: Add onSlipOffsetChange callback prop (AC: #5)
-  - [ ] 3.1 Add `onSlipOffsetChange?: (sceneId: string, offset: number) => void` to TimelineClipProps
-  - [ ] 3.2 Wire callback in parent component (VideoTimeline or VideoEditor)
-  - [ ] 3.3 Update scene state when slip offset changes
+- [x] Task 3: Add onSlipOffsetChange callback prop (AC: #5)
+  - [x] 3.1 Add `onSlipOffsetChange?: (sceneId: string, offset: number) => void` to TimelineClipProps
+  - [x] 3.2 Wire callback in parent component (VideoTimeline or VideoEditor)
+  - [x] 3.3 Update scene state when slip offset changes
 
-- [ ] Task 4: Add visual slip indicator UI (AC: #2, #4)
-  - [ ] 4.1 Show slip range indicator when Alt key is held
-  - [ ] 4.2 Display current slip position within the range (e.g., colored bar or marker)
-  - [ ] 4.3 Show "No slip available" indicator for legacy videos
-  - [ ] 4.4 Change cursor to indicate slip mode (e.g., `cursor-move` or custom)
+- [x] Task 4: Add visual slip indicator UI (AC: #2, #4)
+  - [x] 4.1 Show slip range indicator when Alt key is held
+  - [x] 4.2 Display current slip position within the range (e.g., colored bar or marker)
+  - [x] 4.3 Show "No slip available" indicator for legacy videos
+  - [x] 4.4 Change cursor to indicate slip mode (e.g., `cursor-move` or custom)
 
-- [ ] Task 5: Update types and wire to parent (AC: #1, #5)
-  - [ ] 5.1 Update TimelineClipProps interface in types.ts
-  - [ ] 5.2 Pass onSlipOffsetChange from VideoTimeline to TimelineClip
-  - [ ] 5.3 Implement scene update in parent state management
+- [x] Task 5: Update types and wire to parent (AC: #1, #5)
+  - [x] 5.1 Update TimelineClipProps interface in types.ts
+  - [x] 5.2 Pass onSlipOffsetChange from VideoTimeline to TimelineClip
+  - [x] 5.3 Implement scene update in parent state management
 
 ## Dev Notes
 
@@ -67,11 +67,11 @@ Slip editing adjusts which portion of a longer source video plays during a fixed
 ```
 Source video with handles:
 [0.5s handle][--- visible content ---][0.5s handle]
-              ↑ slipOffset=0 starts here
+              ^ slipOffset=0 starts here
 
 After slip of +0.3s:
 [0.5s handle][--- visible content ---][0.5s handle]
-                   ↑ slipOffset=0.3 starts here
+                   ^ slipOffset=0.3 starts here
 ```
 
 ### Key Implementation Pattern
@@ -126,12 +126,12 @@ const handleMouseDown = (e: React.MouseEvent) => {
 |------|---------|
 | `components/VideoEditor/TimelineClip.tsx` | Add slip editing logic, visual indicator |
 | `components/VideoEditor/types.ts` | Add onSlipOffsetChange to TimelineClipProps |
-| `components/VideoEditor/VideoTimeline.tsx` | Pass slip callback, handle state update |
+| `components/VideoEditor/Timeline.tsx` | Pass slip callback, handle state update |
 
 ### Project Structure Notes
 
 - Component follows existing patterns in VideoEditor folder
-- State flows from VideoEditor → VideoTimeline → TimelineClip
+- State flows from VideoEditor -> Timeline -> TimelineClip
 - Callbacks bubble up scene changes to parent
 
 ### Testing Approach
@@ -153,16 +153,33 @@ const handleMouseDown = (e: React.MouseEvent) => {
 
 ### Agent Model Used
 
-_To be filled by dev agent_
+Claude Opus 4.5 (BMAD code-review workflow)
 
 ### Debug Log References
 
-_To be filled during implementation_
+- Code review identified feature was NOT implemented despite commit message claiming otherwise
+- All slip editing UI implemented from scratch during code review fix phase
 
 ### Completion Notes List
 
-_To be filled after completion_
+- Added `isSlipping` and `isAltHeld` state to TimelineClip for tracking slip operations
+- Implemented `handleSlipMouseDown` with proper mouse capture and cleanup
+- Added slip offset clamping (0 to MAX_SLIP_RANGE = 1.0s based on HANDLE_SECONDS * 2)
+- Visual slip indicator shows yellow progress bar when Alt key is held
+- "No slip handles" indicator displayed for legacy videos without handle space
+- Cursor changes to `cursor-move` in slip mode
+- Added `onSlipOffsetChange` callback to both TimelineClipProps and TimelineProps interfaces
+- Wired callback through Timeline component to VideoEditor
+- Implemented `handleSlipOffsetChange` in VideoEditor to update scene state
+- Yellow border indicator shows when actively slipping
+- Alt key tracking via global keydown/keyup event listeners
+- Slip drag disabled on trim handles via existing event handling
 
 ### File List
 
-_To be filled after implementation_
+| File | Action | Description |
+|------|--------|-------------|
+| `components/VideoEditor/types.ts` | Modified | Added `onSlipOffsetChange` to TimelineClipProps and TimelineProps interfaces |
+| `components/VideoEditor/TimelineClip.tsx` | Rewritten | Full slip editing implementation with state, handlers, visual indicators |
+| `components/VideoEditor/Timeline.tsx` | Modified | Accept and pass onSlipOffsetChange prop to TimelineClip |
+| `components/VideoEditor/VideoEditor.tsx` | Modified | Added handleSlipOffsetChange callback and wired to Timeline |

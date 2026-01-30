@@ -121,7 +121,7 @@ development_status:
 
   # EPIC-10: Video Editor Enhancements (Audio/Video Sync & Slip Editing)
   epic-10: in-progress
-  10-1-slip-editing-ui: ready-for-dev  # Alt+drag to adjust video slip offset
+  10-1-slip-editing-ui: done  # Alt+drag to adjust video slip offset
   10-2-audio-click-prevention: backlog  # Phase 3: Volume fades at transitions
   10-3-breathing-room-gaps: backlog     # Phase 4: Synchronized gaps between clips
   epic-10-retrospective: optional
