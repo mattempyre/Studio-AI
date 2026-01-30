@@ -186,8 +186,21 @@ export interface Scene {
   videoUrl?: string; // New field for generated video URL
   cameraMovement: string;
   visualStyle: string;
-  trimStart?: number; // seconds
-  trimEnd?: number; // seconds
+  trimStart?: number; // seconds trimmed from start
+  trimEnd?: number; // seconds trimmed from end
+  // Timeline positioning fields
+  timelineStart?: number; // position on timeline (seconds)
+  effectiveDuration?: number; // calculated: videoDuration - trimStart - trimEnd
+  videoDuration?: number; // original video duration in seconds
+}
+
+// Timeline state for video editor
+export interface TimelineState {
+  zoomLevel: number; // pixels per second (default 100)
+  scrollOffset: number; // horizontal scroll position
+  selectedClipId: string | null;
+  isDragging: boolean;
+  dragClipId: string | null;
 }
 
 export interface AudioClip {
@@ -195,6 +208,8 @@ export interface AudioClip {
   name: string;
   startTime: number; // Seconds on timeline
   duration: number; // Seconds
+  audioUrl?: string; // URL to audio file (for voice clips from TTS)
+  audioStartOffset?: number; // Seconds offset within the audio file (for section batch audio)
 }
 
 export interface AudioTrack {

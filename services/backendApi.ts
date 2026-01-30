@@ -1,4 +1,4 @@
-import type { BackendProject, BackendSection, BackendSentence } from '../types';
+import type { BackendProject, BackendSection, BackendSentence, Project } from '../types';
 
 const API_BASE = 'http://localhost:3001/api/v1';
 
@@ -380,5 +380,104 @@ export const scriptsApi = {
     return () => {
       eventSource.close();
     };
+  },
+};
+
+// Export job types
+export interface ExportJob {
+  id: string;
+  projectId: string;
+  status: 'queued' | 'bundling' | 'rendering' | 'completed' | 'failed';
+  progress: number;
+  outputPath?: string;
+  error?: string;
+}
+
+export interface ExportStartResult {
+  success: boolean;
+  jobId: string;
+  message: string;
+}
+
+// Export API for video rendering with Remotion
+export const exportApi = {
+  // Start an export job
+  start: async (
+    project: Project,
+    options?: {
+      format?: '1080p' | '720p' | 'vertical';
+      codec?: 'h264' | 'h265' | 'vp8' | 'vp9';
+    }
+  ): Promise<ExportStartResult> => {
+    const response = await fetch(`${API_BASE}/export/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: project.id,
+        project: {
+          id: project.id,
+          name: project.name,
+          scenes: project.scenes,
+          audioTracks: project.audioTracks,
+          textOverlays: project.textOverlays,
+        },
+        format: options?.format || '1080p',
+        codec: options?.codec || 'h264',
+      }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to start export');
+    }
+    return data;
+  },
+
+  // Get export job status
+  getStatus: async (jobId: string): Promise<ExportJob> => {
+    const response = await fetch(`${API_BASE}/export/status/${jobId}`);
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to get export status');
+    }
+    return data.job;
+  },
+
+  // Poll for export completion
+  pollUntilComplete: async (
+    jobId: string,
+    onProgress?: (job: ExportJob) => void,
+    intervalMs: number = 2000
+  ): Promise<ExportJob> => {
+    return new Promise((resolve, reject) => {
+      const poll = async () => {
+        try {
+          const job = await exportApi.getStatus(jobId);
+          onProgress?.(job);
+
+          if (job.status === 'completed') {
+            resolve(job);
+            return;
+          }
+
+          if (job.status === 'failed') {
+            reject(new Error(job.error || 'Export failed'));
+            return;
+          }
+
+          // Continue polling
+          setTimeout(poll, intervalMs);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      poll();
+    });
+  },
+
+  // Get download URL for completed export
+  getDownloadUrl: (jobId: string): string => {
+    return `${API_BASE}/export/download/${jobId}`;
   },
 };

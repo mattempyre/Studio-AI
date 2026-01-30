@@ -14,6 +14,7 @@ import { imagesRouter } from './api/images.js';
 import { modelsRouter } from './api/models.js';
 import { stylesRouter } from './api/styles.js';
 import { promptsRouter } from './api/prompts.js';
+import { exportRouter } from './api/export.js';
 import { inngestHandler } from './api/inngest.js';
 import { inngest } from './inngest/index.js';
 import { setupWebSocket, closeWebSocket, getTotalClients } from './websocket/index.js';
@@ -56,6 +57,12 @@ app.use('/media/projects', express.static(PROJECTS_DIR, {
   maxAge: '1h', // Cache for 1 hour - regeneration may update files
 }));
 
+// Static file serving for exported videos
+const EXPORTS_DIR = join(process.cwd(), 'exports');
+app.use('/exports', express.static(EXPORTS_DIR, {
+  maxAge: '1d', // Cache for 1 day - exports are final
+}));
+
 // Inngest serve endpoint - handles function registration and invocation
 // This must be registered before other routes to ensure Inngest can reach it
 app.use('/api/v1/inngest', inngestHandler);
@@ -75,6 +82,8 @@ app.use('/api/v1', imagesRouter);
 // Generation models and visual styles - for Style Builder
 app.use('/api/v1/models', modelsRouter);
 app.use('/api/v1/styles', stylesRouter);
+// Video export with Remotion
+app.use('/api/v1/export', exportRouter);
 
 // Test endpoint to trigger Inngest events (development only)
 if (process.env.NODE_ENV !== 'production') {

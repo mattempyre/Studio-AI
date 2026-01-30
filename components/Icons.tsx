@@ -63,7 +63,11 @@ import {
   Loader2,
   Camera,
   Circle,
-  Eraser
+  Eraser,
+  Minus,
+  ZoomIn,
+  ZoomOut,
+  Info
 } from 'lucide-react';
 
 export {
@@ -130,5 +134,9 @@ export {
   Loader2,
   Camera,
   Circle,
-  Eraser
+  Eraser,
+  Minus,
+  ZoomIn,
+  ZoomOut,
+  Info
 };

@@ -5,7 +5,7 @@ import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import ScriptEditorV2 from './components/ScriptEditorV2';
 import Storyboard from './components/Storyboard';
-import VideoPreview from './components/VideoPreview';
+import { VideoEditor } from './components/VideoEditor';
 import CharacterLibrary from './components/CharacterLibrary';
 import { ViewState, Project, User, Character, Voice } from './types';
 import { projectsApi } from './services/backendApi';

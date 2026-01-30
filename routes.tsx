@@ -12,14 +12,14 @@ import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import ScriptEditorV2 from './components/ScriptEditorV2';
 import Storyboard from './components/Storyboard';
-import VideoPreview from './components/VideoPreview';
+import { VideoEditor } from './components/VideoEditor';
 import CharacterLibrary from './components/CharacterLibrary';
 import { StyleBuilder } from './components/StyleBuilder';
 import { useAppContext, AppProvider } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { AudioPlayerProvider } from './context/AudioPlayerContext';
 import { projectsApi } from './services/backendApi';
-import type { BackendProject } from './types';
+import type { BackendProject, AudioClip, AudioTrack } from './types';
 
 // Root Layout Component - wraps all routes with ThemeProvider, AppProvider, AudioPlayerProvider and Layout
 function RootLayout() {
@@ -381,15 +381,182 @@ function StoryboardPage() {
 
 function VideoPreviewPage() {
   const { projectId } = videoRoute.useParams();
-  const { projects, handleProjectUpdate } = useAppContext();
+  const navigate = videoRoute.useNavigate();
+  const [backendProject, setBackendProject] = useState<BackendProject | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const project = projects.find((p) => p.id === projectId);
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-  if (!project) {
-    return <Navigate to="/" />;
+  const toMediaUrl = (filePath: string | null | undefined, cacheBuster?: string | Date | null): string | undefined => {
+    if (!filePath) return undefined;
+    let url: string;
+    if (filePath.startsWith('/media/')) {
+      url = `${API_BASE}${filePath}`;
+    } else {
+      const normalized = filePath.replace(/\\/g, '/');
+      const projectsMatch = normalized.match(/projects\/(.+)$/);
+      if (projectsMatch) {
+        url = `${API_BASE}/media/projects/${projectsMatch[1]}`;
+      } else {
+        url = `${API_BASE}${filePath}`;
+      }
+    }
+    if (cacheBuster) {
+      const timestamp = cacheBuster instanceof Date ? cacheBuster.getTime() : new Date(cacheBuster).getTime();
+      url = `${url}?t=${timestamp}`;
+    }
+    return url;
+  };
+
+  useEffect(() => {
+    const loadProject = async () => {
+      try {
+        setIsLoading(true);
+        const data = await projectsApi.get(projectId);
+        setBackendProject(data);
+      } catch (err) {
+        console.error('Failed to load project:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load project');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProject();
+  }, [projectId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-text-muted">Loading video editor...</p>
+        </div>
+      </div>
+    );
   }
 
-  return <VideoPreview project={project} onUpdateProject={handleProjectUpdate} />;
+  if (error || !backendProject) {
+    return (
+      <div className="flex-1 flex items-center justify-center flex-col gap-4">
+        <p className="text-red-400">{error || 'Project not found'}</p>
+        <button
+          onClick={() => navigate({ to: '/' })}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm"
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  // Transform backend data to Project format for VideoEditor
+  const scenes = backendProject.sections.flatMap((section) =>
+    section.sentences.map((sentence, index) => {
+      const videoDuration = sentence.audioDuration ? sentence.audioDuration / 1000 : 5;
+      return {
+        id: sentence.id,
+        scriptSectionId: sentence.sectionId,
+        timestamp: '',
+        narration: sentence.text,
+        imagePrompt: sentence.imagePrompt || '',
+        videoPrompt: sentence.videoPrompt || undefined,
+        imageUrl: toMediaUrl(sentence.imageFile, sentence.updatedAt),
+        videoUrl: toMediaUrl(sentence.videoFile, sentence.updatedAt),
+        cameraMovement: sentence.cameraMovement || 'static',
+        visualStyle: backendProject.visualStyle || 'cinematic',
+        videoDuration,
+        trimStart: 0,
+        trimEnd: 0,
+        effectiveDuration: videoDuration,
+        timelineStart: undefined, // Will be calculated by VideoEditor
+      };
+    })
+  );
+
+  // Build voice track from generated sentence audio
+  // Supports two audio generation modes:
+  // 1. Individual sentence audio: audioFile contains the sentence-specific audio
+  // 2. Section batch audio: sectionAudioFile contains shared audio, audioStartMs/audioEndMs define timing
+  const voiceClips: AudioClip[] = [];
+  let clipStartTime = 0;
+  for (const section of backendProject.sections) {
+    for (const sentence of section.sentences) {
+      // Check for individual sentence audio first
+      if (sentence.audioFile && sentence.audioDuration) {
+        const durationSeconds = sentence.audioDuration / 1000;
+        voiceClips.push({
+          id: `vo_${sentence.id}`,
+          name: sentence.text.substring(0, 30) + (sentence.text.length > 30 ? '...' : ''),
+          startTime: clipStartTime,
+          duration: durationSeconds,
+          audioUrl: toMediaUrl(sentence.audioFile, sentence.updatedAt),
+        });
+        clipStartTime += durationSeconds;
+      }
+      // Fall back to section-level batch audio
+      else if (sentence.sectionAudioFile && sentence.audioDuration) {
+        const durationSeconds = sentence.audioDuration / 1000;
+        const audioStartSec = (sentence.audioStartMs ?? 0) / 1000;
+        voiceClips.push({
+          id: `vo_${sentence.id}`,
+          name: sentence.text.substring(0, 30) + (sentence.text.length > 30 ? '...' : ''),
+          startTime: clipStartTime,
+          duration: durationSeconds,
+          audioUrl: toMediaUrl(sentence.sectionAudioFile, sentence.updatedAt),
+          // Store timing info for proper playback offset within section audio
+          audioStartOffset: audioStartSec,
+        });
+        clipStartTime += durationSeconds;
+      }
+    }
+  }
+
+  const audioTracks: AudioTrack[] = [
+    {
+      id: 'track_vo_default',
+      type: 'voice',
+      name: 'Voice Over',
+      volume: 1.0,
+      isMuted: false,
+      clips: voiceClips,
+    },
+    {
+      id: 'track_music_default',
+      type: 'music',
+      name: 'Background Music',
+      volume: 0.8,
+      isMuted: false,
+      clips: [],
+    },
+  ];
+
+  const project = {
+    id: backendProject.id,
+    name: backendProject.name,
+    type: 'Video' as const,
+    status: backendProject.status as 'draft' | 'rendering' | 'completed',
+    lastEdited: backendProject.updatedAt ? new Date(backendProject.updatedAt).toLocaleDateString() : 'Never',
+    createdAt: backendProject.createdAt ? new Date(backendProject.createdAt).toLocaleDateString() : '',
+    script: backendProject.sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      content: s.sentences.map((sen) => sen.text).join(' '),
+      duration: '',
+    })),
+    scenes,
+    textOverlays: [],
+    audioTracks: voiceClips.length > 0 ? audioTracks : undefined, // Use generated audio or let VideoEditor initialize
+    progress: 0,
+    visualStyle: backendProject.visualStyle || 'cinematic',
+  };
+
+  const handleProjectUpdate = (updatedProject: typeof project) => {
+    // TODO: Persist timeline changes to backend
+    console.log('Video editor update:', updatedProject);
+  };
+
+  return <VideoEditor project={project} onUpdateProject={handleProjectUpdate} />;
 }
 
 

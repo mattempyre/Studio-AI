@@ -5,3 +5,4 @@ export { scriptsRouter } from './scripts.js';
 export { imagesRouter } from './images.js';
 export { modelsRouter } from './models.js';
 export { stylesRouter } from './styles.js';
+export { exportRouter } from './export.js';
