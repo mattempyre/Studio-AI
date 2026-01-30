@@ -451,8 +451,9 @@ function VideoPreviewPage() {
   }
 
   // Transform backend data to Project format for VideoEditor
+  // Videos are continuous (no gaps), audio clips align with their video start times
   const scenes = backendProject.sections.flatMap((section) =>
-    section.sentences.map((sentence, index) => {
+    section.sentences.map((sentence) => {
       const videoDuration = sentence.audioDuration ? sentence.audioDuration / 1000 : 5;
       return {
         id: sentence.id,
@@ -469,30 +470,32 @@ function VideoPreviewPage() {
         trimStart: 0,
         trimEnd: 0,
         effectiveDuration: videoDuration,
-        timelineStart: undefined, // Will be calculated by VideoEditor
+        timelineStart: undefined, // VideoEditor calculates continuous positions
       };
     })
   );
 
-  // Build voice track from generated sentence audio
+  // Build voice track - audio clips start when their video starts
   // Supports two audio generation modes:
   // 1. Individual sentence audio: audioFile contains the sentence-specific audio
   // 2. Section batch audio: sectionAudioFile contains shared audio, audioStartMs/audioEndMs define timing
   const voiceClips: AudioClip[] = [];
-  let clipStartTime = 0;
+  let videoStartTime = 0; // Track where each video starts on timeline
+
   for (const section of backendProject.sections) {
     for (const sentence of section.sentences) {
+      const videoDuration = sentence.audioDuration ? sentence.audioDuration / 1000 : 5;
+
       // Check for individual sentence audio first
       if (sentence.audioFile && sentence.audioDuration) {
         const durationSeconds = sentence.audioDuration / 1000;
         voiceClips.push({
           id: `vo_${sentence.id}`,
           name: sentence.text.substring(0, 30) + (sentence.text.length > 30 ? '...' : ''),
-          startTime: clipStartTime,
+          startTime: videoStartTime, // Audio starts when video starts
           duration: durationSeconds,
           audioUrl: toMediaUrl(sentence.audioFile, sentence.updatedAt),
         });
-        clipStartTime += durationSeconds;
       }
       // Fall back to section-level batch audio
       else if (sentence.sectionAudioFile && sentence.audioDuration) {
@@ -501,14 +504,16 @@ function VideoPreviewPage() {
         voiceClips.push({
           id: `vo_${sentence.id}`,
           name: sentence.text.substring(0, 30) + (sentence.text.length > 30 ? '...' : ''),
-          startTime: clipStartTime,
+          startTime: videoStartTime, // Audio starts when video starts
           duration: durationSeconds,
           audioUrl: toMediaUrl(sentence.sectionAudioFile, sentence.updatedAt),
           // Store timing info for proper playback offset within section audio
           audioStartOffset: audioStartSec,
         });
-        clipStartTime += durationSeconds;
       }
+
+      // Videos are continuous - next video starts immediately after this one
+      videoStartTime += videoDuration;
     }
   }
 

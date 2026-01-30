@@ -192,6 +192,8 @@ export interface Scene {
   timelineStart?: number; // position on timeline (seconds)
   effectiveDuration?: number; // calculated: videoDuration - trimStart - trimEnd
   videoDuration?: number; // original video duration in seconds
+  // Slip editing (videos are generated 1s longer with 0.5s handles on each end)
+  slipOffset?: number; // Seconds into source video to start playback (default: 0.5 = handle start)
 }
 
 // Timeline state for video editor

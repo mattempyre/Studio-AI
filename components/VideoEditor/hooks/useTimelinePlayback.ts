@@ -84,12 +84,13 @@ export function useTimelinePlayback({
 
       const clipStart = scene.timelineStart ?? 0;
       const trimOffset = scene.trimStart ?? 0;
+      const slipOffset = scene.slipOffset ?? 0; // Default to 0 for backwards compatibility
       const effectiveDur = scene.effectiveDuration ?? scene.videoDuration ?? 5;
 
-      // Calculate local time within the video
-      const localTime = masterTime - clipStart + trimOffset;
+      // Calculate local time within the video (includes trim and slip offsets)
+      const localTime = masterTime - clipStart + trimOffset + slipOffset;
 
-      if (localTime >= 0 && localTime < effectiveDur + trimOffset) {
+      if (localTime >= 0 && localTime < effectiveDur + trimOffset + slipOffset) {
         // This video should be playing
         const targetTime = localTime;
 

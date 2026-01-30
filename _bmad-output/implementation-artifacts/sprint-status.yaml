@@ -118,3 +118,10 @@ development_status:
   9-3-project-dashboard: ready-for-dev
   9-4-global-project-dropdown: ready-for-dev
   epic-9-retrospective: optional
+
+  # EPIC-10: Video Editor Enhancements (Audio/Video Sync & Slip Editing)
+  epic-10: in-progress
+  10-1-slip-editing-ui: ready-for-dev  # Alt+drag to adjust video slip offset
+  10-2-audio-click-prevention: backlog  # Phase 3: Volume fades at transitions
+  10-3-breathing-room-gaps: backlog     # Phase 4: Synchronized gaps between clips
+  epic-10-retrospective: optional

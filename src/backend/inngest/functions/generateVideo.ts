@@ -12,6 +12,9 @@ export const DEFAULT_DURATION_SECONDS = 5;
 const DEFAULT_WIDTH = 1280;
 const DEFAULT_HEIGHT = 720;
 
+// Handle duration for slip editing (0.5s on each end = 1s total extra)
+export const HANDLE_SECONDS = 0.5;
+
 // Valid camera movement values
 const VALID_CAMERA_MOVEMENTS = ['static', 'pan_left', 'pan_right', 'zoom_in', 'zoom_out', 'orbit', 'truck'] as const;
 type CameraMovement = typeof VALID_CAMERA_MOVEMENTS[number];
@@ -32,15 +35,23 @@ function validateCameraMovement(value: string | undefined): CameraMovement {
 
 /**
  * Calculate frame count based on target duration and FPS.
+ * Optionally adds handles (extra frames) for slip editing flexibility.
  *
  * @param durationMs - Target duration in milliseconds (from audioDuration)
- * @param fps - Frames per second (default 16 for Wan 2.2)
+ * @param fps - Frames per second (default 24)
+ * @param addHandles - Whether to add 0.5s handles on each end for slip editing (default true)
  * @returns Frame count for the video
  */
-export function calculateFrameCount(durationMs: number | null | undefined, fps: number = DEFAULT_FPS): number {
+export function calculateFrameCount(
+  durationMs: number | null | undefined,
+  fps: number = DEFAULT_FPS,
+  addHandles: boolean = true
+): number {
   if (!durationMs || durationMs <= 0) {
     // Default to 5 seconds if no audio duration
-    return Math.round(DEFAULT_DURATION_SECONDS * fps);
+    const baseDuration = DEFAULT_DURATION_SECONDS;
+    const finalDuration = addHandles ? baseDuration + (HANDLE_SECONDS * 2) : baseDuration;
+    return Math.round(finalDuration * fps);
   }
 
   // Convert ms to seconds and calculate frames
@@ -48,9 +59,12 @@ export function calculateFrameCount(durationMs: number | null | undefined, fps: 
 
   // Clamp to reasonable bounds (5-15 seconds for video generation)
   // Minimum 5 seconds ensures short narrations still have adequate video
-  const clampedDuration = Math.max(5, Math.min(15, durationSeconds));
+  const baseDuration = Math.max(5, Math.min(15, durationSeconds));
 
-  return Math.round(clampedDuration * fps);
+  // Add handles for slip editing flexibility (0.5s on each end)
+  const finalDuration = addHandles ? baseDuration + (HANDLE_SECONDS * 2) : baseDuration;
+
+  return Math.round(finalDuration * fps);
 }
 
 /**
